@@ -32,10 +32,11 @@ const KIND_IDS: Record<ContainerSnapshot["kind"], string> = {
   shulker_box: "minecraft:shulker_box",
 };
 
-/** Antwort von `list uuids`: "… online: Name (uuid), Name2 (uuid2)". */
+/** Antwort von `list uuids`: "… online: Name (uuid), Name2 (uuid2)". Vorangestellte fremde Ausgaben zählen nicht. */
 export function parsePlayerList(response: string): { name: string; uuid: string }[] {
   const out: { name: string; uuid: string }[] = [];
-  for (const m of response.matchAll(/([A-Za-z0-9_]{1,16}) \(([0-9a-fA-F-]{36})\)/g)) out.push({ name: m[1]!, uuid: m[2]!.toLowerCase() });
+  const at = response.lastIndexOf("players online:");
+  for (const m of response.slice(Math.max(at, 0)).matchAll(/([A-Za-z0-9_]{1,16}) \(([0-9a-fA-F-]{36})\)/g)) out.push({ name: m[1]!, uuid: m[2]!.toLowerCase() });
   return out;
 }
 
@@ -83,6 +84,16 @@ export class LiveCollector {
     }
   }
 
+  /**
+   * `/data get` für ein Ziel (Spielername oder "x, y, z"). Fehlt dessen Antwort, weil der Server
+   * fremde Ausgabe geliefert hat, einmal wiederholen.
+   */
+  private async dataGet(cmd: string, subject: string): Promise<{ data: ReturnType<typeof snbtFromDataGet>; res: string }> {
+    let res = await this.rconCommand(cmd);
+    if (!res.includes(`${subject} has the following `) && res.includes(" has the following ")) res = await this.rconCommand(cmd);
+    return { data: snbtFromDataGet(res, subject), res };
+  }
+
   close() {
     this.rcon?.close();
     this.files.close();
@@ -105,7 +116,7 @@ export class LiveCollector {
       const paths = [...(s.sources.inventories ? ["Inventory", "equipment"] : []), ...(s.sources.enderChests ? ["EnderItems"] : [])];
       for (const path of paths) {
         try {
-          const v = snbtFromDataGet(await this.rconCommand(`data get entity ${p.name} ${path}`));
+          const { data: v } = await this.dataGet(`data get entity ${p.name} ${path}`, p.name);
           if (v != null) data[path] = v;
         } catch (err) {
           // Ein kaputter Spieler darf die Runde nicht abbrechen
@@ -130,17 +141,16 @@ export class LiveCollector {
 
     if (s.sources.zoneChests) {
       for (const c of [...this.zoneContainers.values()]) {
-        const res = await this.rconCommand(`execute in ${c.dimension} run data get block ${c.x} ${c.y} ${c.z}`);
-        let data;
+        let data, res;
         try {
-          data = snbtFromDataGet(res);
+          ({ data, res } = await this.dataGet(`execute in ${c.dimension} run data get block ${c.x} ${c.y} ${c.z}`, `${c.x}, ${c.y}, ${c.z}`));
         } catch (err) {
           console.warn(`[live] Kiste ${c.id}: ${err instanceof Error ? err.message : String(err)}`);
           continue;
         }
         if (!data) {
           // Kiste abgebaut oder Bereich nicht geladen: nur bei eindeutiger Meldung entfernen
-          if (/no block entity|not a block entity/i.test(res)) this.zoneContainers.delete(c.id);
+          if (!res.includes(" has the following ") && /no block entity|not a block entity/i.test(res)) this.zoneContainers.delete(c.id);
           continue;
         }
         const raw = { id: KIND_IDS[c.kind], ...(data as object) };

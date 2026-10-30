@@ -101,9 +101,15 @@ export function parseSnbt(text: string): NbtValue {
   return v;
 }
 
-/** Schneidet die SNBT-Daten aus einer `/data get`-Antwort ("… has the following … data: {…}"). */
-export function snbtFromDataGet(response: string): NbtValue | null {
-  const idx = response.indexOf(": ");
+/**
+ * Schneidet die SNBT-Daten aus einer `/data get`-Antwort ("… has the following … data: {…}").
+ * Der Server stellt manchmal die Ausgabe eines früheren Befehls davor (auch von anderen RCON-Verbindungen),
+ * deshalb zählt nur die letzte Antwort; mit `subject` (Spielername oder "x, y, z") nur die zum abgefragten Ziel.
+ */
+export function snbtFromDataGet(response: string, subject?: string): NbtValue | null {
+  const at = response.lastIndexOf(subject ? `${subject} has the following ` : "has the following ");
+  if (at < 0) return null;
+  const idx = response.indexOf(": ", at);
   if (idx < 0) return null;
   const rest = response.slice(idx + 2).trim();
   if (!/^[{["'\-\d]/.test(rest)) return null;
