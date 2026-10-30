@@ -23,6 +23,8 @@ export interface Settings {
     map: boolean;
     /** Positionen der Online-Spieler lesen und Entnahmen aus fremden Kisten melden (RCON). */
     takes: boolean;
+    /** Spielerstatistiken (Spielzeit, Tode, Abgebautes …) aus den Stats-Dateien, bei jedem Zonen-Scan (FTP). */
+    stats: boolean;
   };
   /** Spieler und bekannte Kisten abfragen, alle n Sekunden. */
   pollSeconds: number;
@@ -46,7 +48,7 @@ export const LIMITS = {
 export function defaultSettings(pollSeconds = 15): Settings {
   return {
     paused: false,
-    sources: { inventories: true, enderChests: true, offlinePlayers: true, zoneChests: true, fullScan: true, map: true, takes: true },
+    sources: { inventories: true, enderChests: true, offlinePlayers: true, zoneChests: true, fullScan: true, map: true, takes: true, stats: true },
     pollSeconds,
     zoneScanMinutes: 30,
     fullScanHour: 4,
@@ -75,6 +77,7 @@ export function normalizeSettings(input: unknown, base: Settings): Settings {
       fullScan: bool(src.fullScan, base.sources.fullScan),
       map: bool(src.map, base.sources.map),
       takes: bool(src.takes, base.sources.takes),
+      stats: bool(src.stats, base.sources.stats),
     },
     pollSeconds: clamp(i.pollSeconds, LIMITS.pollSeconds, base.pollSeconds),
     zoneScanMinutes: clamp(i.zoneScanMinutes, LIMITS.zoneScanMinutes, base.zoneScanMinutes),

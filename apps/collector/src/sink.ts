@@ -1,12 +1,13 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { PlayerStatsRow } from "./live.js";
 import { COMMON_CLAIM, regionOf, type AggregateResult, type ContainerSnapshot, type PlayerSnapshot, type StockRow, type TakeConfidence, type TakeEvent } from "@mc/core";
 
 /** Ziel für die gesammelten Daten. */
 export interface Sink {
   write(players: PlayerSnapshot[], containers: ContainerSnapshot[], result: AggregateResult, historyMinutes?: number): Promise<void>;
   heartbeat(mode: string, message?: string, extra?: HeartbeatExtra): Promise<void>;
-  /** Offene "Jetzt suchen"-Anfragen abholen und als gestartet markieren. */
-  takeScanRequests(): Promise<number[]>;
+  /** Offene "Jetzt suchen"- und "Karte neu zeichnen"-Anfragen abholen und als gestartet markieren. */
+  takeScanRequests(): Promise<ScanRequest[]>;
   finishScanRequests(ids: number[], result: string): Promise<void>;
   /** Zonen aus der Verwaltung der Website. */
   loadZones(): Promise<Zone[]>;
@@ -16,6 +17,8 @@ export interface Sink {
   loadUnnamed(): Promise<UnnamedState>;
   /** Entnahmen aus fremden Kisten speichern. Fehler werden nur gemeldet, die Runde läuft weiter. */
   writeTakes(events: TakeEvent[]): Promise<void>;
+  /** Spielerstatistiken speichern (nur geänderte). Fehler werden nur gemeldet. */
+  writeStats(rows: PlayerStatsRow[]): Promise<void>;
 }
 
 export interface UnnamedState {
@@ -23,6 +26,12 @@ export interface UnnamedState {
   claims: Map<string, string>;
   /** Auf der Website als „keine Spielerkiste“ ausgeblendet. */
   hidden: Set<string>;
+}
+
+export interface ScanRequest {
+  id: number;
+  /** "map": zusätzlich die Weltkarte neu zeichnen (nur Admins) */
+  kind: "scan" | "map";
 }
 
 export interface HeartbeatExtra {
@@ -138,12 +147,15 @@ export class SupabaseSink implements Sink {
     );
   }
 
-  async takeScanRequests() {
-    const { data, error } = await this.db.from("scan_requests").select("id").is("started_at", null);
+  async takeScanRequests(): Promise<ScanRequest[]> {
+    const open = (cols: string) => this.db.from("scan_requests").select(cols).is("started_at", null);
+    let { data, error } = await open("id, kind");
+    // Spalte "kind" fehlt noch (SQL nicht ausgeführt): alles sind normale Suchanfragen
+    if (error?.code === "42703") ({ data, error } = await open("id"));
     if (error) throw error;
-    const ids = (data ?? []).map((r) => r.id as number);
-    if (ids.length) await this.check(this.db.from("scan_requests").update({ started_at: new Date().toISOString() }).in("id", ids));
-    return ids;
+    const requests = ((data ?? []) as unknown as { id: number; kind?: string }[]).map((r): ScanRequest => ({ id: r.id, kind: r.kind === "map" ? "map" : "scan" }));
+    if (requests.length) await this.check(this.db.from("scan_requests").update({ started_at: new Date().toISOString() }).in("id", requests.map((r) => r.id)));
+    return requests;
   }
 
   async finishScanRequests(ids: number[], result: string) {
@@ -220,6 +232,26 @@ export class SupabaseSink implements Sink {
     }
   }
 
+  /** Zuletzt geschriebene Statistik je Spieler, als JSON zum Vergleichen. */
+  private lastStats = new Map<string, string>();
+  private statsWarned = false;
+
+  async writeStats(rows: PlayerStatsRow[]) {
+    const changed = rows.filter((r) => this.lastStats.get(r.uuid) !== JSON.stringify([r.name, r.stats]));
+    if (!changed.length) return;
+    const now = new Date().toISOString();
+    const { error } = await this.db.from("player_stats").upsert(changed.map((r) => ({ uuid: r.uuid, name: r.name, stats: r.stats, updated_at: now })));
+    if (error) {
+      // Tabelle fehlt noch (SQL nicht ausgeführt): einmal melden, Bestände laufen weiter
+      if (!this.statsWarned) console.warn(`[sink] Statistiken nicht gespeichert: ${error.message}`);
+      this.statsWarned = true;
+      return;
+    }
+    this.statsWarned = false;
+    for (const r of changed) this.lastStats.set(r.uuid, JSON.stringify([r.name, r.stats]));
+    console.log(`[sink] Statistiken von ${changed.length} Spielern aktualisiert`);
+  }
+
   private async check(q: PromiseLike<{ error: unknown }>) {
     const { error } = await q;
     if (error) throw error;
@@ -233,7 +265,7 @@ export class ConsoleSink implements Sink {
     console.log(`[console] ${result.rows.length} Zeilen, ${total} Items, ${result.unassigned.length} nicht zugeordnet`);
   }
   async heartbeat() {}
-  async takeScanRequests() {
+  async takeScanRequests(): Promise<ScanRequest[]> {
     return [];
   }
   async finishScanRequests() {}
@@ -247,6 +279,9 @@ export class ConsoleSink implements Sink {
   }
   async loadUnnamed() {
     return { show: false, claims: new Map<string, string>(), hidden: new Set<string>() };
+  }
+  async writeStats(rows: PlayerStatsRow[]) {
+    for (const r of rows) console.log(`[console] Statistik ${r.name}: ${Math.round((r.stats.custom.play_time ?? 0) / 72000)} h, ${r.stats.custom.deaths ?? 0} Tode, ${r.stats.totals.mined} abgebaut`);
   }
   async writeTakes(events: TakeEvent[]) {
     for (const e of events) console.log(`[console] Entnahme: ${e.count}× ${e.item_id} aus ${e.container_id} (${e.owner_label}), ${e.confidence}: ${e.suspects.join(", ")}`);

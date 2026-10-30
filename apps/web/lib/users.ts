@@ -58,3 +58,17 @@ export const deleteUser = (id: string) => rpc("admin_delete_user", { p_user: id 
 export const updateOwnSettings = (inventoryPublic: boolean, aliases: string[]) =>
   rpc("update_own_settings", { p_inventory_public: inventoryPublic, p_aliases: aliases });
 export const changeOwnPassword = (oldPw: string, newPw: string) => rpc("change_own_password", { p_old: oldPw, p_new: newPw });
+
+/** Eigene private Kiste (Kisten-ID) oder null. Fehlt die Tabelle noch, gibt es einfach keine. */
+export async function loadPrivateContainer(): Promise<string | null> {
+  const { data, error } = await supabase().from("container_private").select("container_id").maybeSingle();
+  if (error) return null;
+  return (data?.container_id as string | undefined) ?? null;
+}
+
+/** Eigene Kiste privat machen (true) oder wieder für alle zeigen (false). */
+export async function setContainerPrivate(id: string, isPrivate: boolean) {
+  const { error } = await supabase().rpc("set_container_private", { p_container: id, p_private: isPrivate });
+  if (error?.code === "PGRST202") throw new Error("Private Kisten fehlen noch in der Datenbank. Das SQL dafür muss einmal in Supabase laufen.");
+  if (error) throw new Error(error.message);
+}

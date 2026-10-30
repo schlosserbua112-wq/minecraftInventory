@@ -1,5 +1,5 @@
-import { aggregate, COMMON_CLAIM, createMockWorld, type MockWorld } from "@mc/core";
-import type { Actions, Project, Snapshot, TakeRow } from "./types";
+import { aggregate, COMMON_CLAIM, createMockWorld, rng, summarizeStats, type MockWorld } from "@mc/core";
+import type { Actions, PlayerStatsRow, Project, Snapshot, TakeRow } from "./types";
 
 /** Beispieldaten im Browser: dieselbe Mock-Welt wie der Mock-Sammler, nur ohne Supabase. */
 export class DemoSource {
@@ -100,13 +100,13 @@ export class DemoSource {
   }
 
   actions: Actions = {
-    requestScan: async () => {
+    requestScan: async (kind = "scan") => {
       const id = this.nextId++;
-      this.base.scans.unshift({ id, requested_at: new Date().toISOString(), finished_at: null, result: null });
+      this.base.scans.unshift({ id, requested_at: new Date().toISOString(), finished_at: null, result: null, kind });
       this.emit();
       setTimeout(() => {
         const s = this.base.scans.find((x) => x.id === id);
-        if (s) Object.assign(s, { finished_at: new Date().toISOString(), result: "Demo: keine neuen Kisten gefunden" });
+        if (s) Object.assign(s, { finished_at: new Date().toISOString(), result: kind === "map" ? "Demo: Karte neu gezeichnet" : "Demo: keine neuen Kisten gefunden" });
         this.emit();
       }, 2500);
     },
@@ -182,5 +182,53 @@ export class DemoSource {
       this.takes = this.takes.filter((t) => t.id !== id);
       for (const fn of this.takeListeners) fn();
     },
+    listStats: async () => demoStats(this.world.players),
+    subscribeStats: () => () => {},
   };
+}
+
+/** Ausgedachte Stats-Dateien für die Mock-Spieler, je Name immer gleich. */
+function demoStats(players: { uuid: string; name: string }[]): PlayerStatsRow[] {
+  const updated_at = new Date(Date.now() - 7 * 60_000).toISOString();
+  return players.map((p, i) => {
+    const r = rng(1000 + i);
+    const hours = 4 + r() * 120;
+    const n = (scale: number) => Math.round(r() * scale * hours);
+    const pick = (ids: string[], scale: number) => Object.fromEntries(ids.map((id) => [`minecraft:${id}`, n(scale)]));
+    const raw = {
+      stats: {
+        "minecraft:custom": {
+          "minecraft:play_time": Math.round(hours * 72_000),
+          "minecraft:deaths": n(0.6),
+          "minecraft:mob_kills": n(12),
+          "minecraft:player_kills": n(0.05),
+          "minecraft:jump": n(900),
+          "minecraft:damage_dealt": n(2500),
+          "minecraft:damage_taken": n(1200),
+          "minecraft:fish_caught": n(0.8),
+          "minecraft:animals_bred": n(1.5),
+          "minecraft:traded_with_villager": n(2),
+          "minecraft:enchant_item": n(0.4),
+          "minecraft:sleep_in_bed": n(0.5),
+          "minecraft:open_chest": n(40),
+          "minecraft:time_since_death": n(20_000),
+          "minecraft:walk_one_cm": n(180_000),
+          "minecraft:sprint_one_cm": n(140_000),
+          "minecraft:swim_one_cm": n(12_000),
+          "minecraft:aviate_one_cm": n(160_000),
+          "minecraft:boat_one_cm": n(30_000),
+          "minecraft:horse_one_cm": n(15_000),
+          "minecraft:fall_one_cm": n(9_000),
+        },
+        "minecraft:mined": pick(["stone", "deepslate", "dirt", "oak_log", "coal_ore", "iron_ore", "diamond_ore", "sand", "netherrack", "spruce_log", "gravel"], 120),
+        "minecraft:crafted": pick(["oak_planks", "torch", "stone_bricks", "chest", "iron_pickaxe", "bread", "glass_pane"], 20),
+        "minecraft:used": pick(["stone_bricks", "torch", "cobblestone", "spruce_planks", "diamond_pickaxe", "bread", "glass"], 60),
+        "minecraft:broken": pick(["iron_pickaxe", "diamond_pickaxe", "stone_axe"], 0.05),
+        "minecraft:picked_up": pick(["cobblestone", "dirt", "coal", "raw_iron"], 80),
+        "minecraft:killed": pick(["zombie", "skeleton", "creeper", "spider", "enderman", "cow", "chicken", "drowned"], 2),
+        "minecraft:killed_by": pick(["creeper", "skeleton", "zombie"], 0.15),
+      },
+    };
+    return { uuid: p.uuid, name: p.name, stats: summarizeStats(raw)!, updated_at };
+  });
 }

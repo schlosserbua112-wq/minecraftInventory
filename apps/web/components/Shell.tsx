@@ -53,6 +53,7 @@ export function Shell({ children }: { children: ReactNode }) {
   const nav = [
     ...NAV.slice(0, 3),
     { href: "/entnahmen", label: "Entnahmen" },
+    { href: "/statistiken", label: "Statistiken" },
     ...NAV.slice(3),
     ...(profile?.is_admin ? [{ href: "/benutzer", label: "Benutzer" }] : []),
   ];

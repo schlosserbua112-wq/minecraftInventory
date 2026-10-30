@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { StockRow } from "@mc/core";
-import type { Actions, Project, Snapshot, TakeRow } from "./types";
+import type { Actions, PlayerStatsRow, Project, Snapshot, TakeRow } from "./types";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -24,6 +24,13 @@ async function all<T>(table: string, columns = "*"): Promise<T[]> {
   }
 }
 
+async function loadScans() {
+  const recent = (cols: string) => supabase().from("scan_requests").select(cols).order("requested_at", { ascending: false }).limit(5);
+  const res = await recent("id, requested_at, finished_at, result, kind");
+  // Spalte "kind" fehlt noch (SQL nicht ausgeführt): ohne sie laden
+  return res.error?.code === "42703" ? recent("id, requested_at, finished_at, result") : res;
+}
+
 export async function loadSnapshot(): Promise<Snapshot> {
   const [players, containers, stock, zones, status, scans, hidden, landmarks] = await Promise.all([
     all<Snapshot["players"][number]>("players", "uuid, name, online, last_seen"),
@@ -31,13 +38,13 @@ export async function loadSnapshot(): Promise<Snapshot> {
     all<StockRow>("stock_items", "source_kind, source_id, owner_type, owner_key, owner_label, item_id, count"),
     all<Snapshot["zones"][number]>("zones"),
     all<NonNullable<Snapshot["status"]>>("collector_status", "heartbeat_at, mode, message"),
-    supabase().from("scan_requests").select("id, requested_at, finished_at, result").order("requested_at", { ascending: false }).limit(5),
+    loadScans(),
     supabase().from("container_hidden").select("container_id"),
     // Ebenso: ohne Tabelle einfach keine Landmarks
     supabase().from("landmarks").select("id, name, color, x, z, created_by").order("name"),
   ]);
   return {
-    players, containers, stock, zones, landmarks: landmarks.data ?? [], status: status[0] ?? null, scans: scans.data ?? [],
+    players, containers, stock, zones, landmarks: landmarks.data ?? [], status: status[0] ?? null, scans: (scans.data ?? []) as unknown as Snapshot["scans"],
     hidden: (hidden.data ?? []).map((r) => r.container_id as string),
   };
 }
@@ -96,7 +103,13 @@ export function supabaseActions(refresh: () => void): Actions {
     refresh();
   };
   return {
-    requestScan: () => after(db().from("scan_requests").insert({})),
+    requestScan: async (kind = "scan") => {
+      const { error } = await db().from("scan_requests").insert(kind === "map" ? { kind } : {});
+      if (error?.code === "42703" || error?.code === "PGRST204") throw new Error("Die Spalte für Kartenanfragen fehlt noch. Das SQL dafür muss einmal in Supabase laufen.");
+      if (error?.code === "42501") throw new Error("Nur Admins dürfen die Karte neu zeichnen lassen.");
+      if (error) throw error;
+      refresh();
+    },
     addZone: (z) => after(db().from("zones").insert(z)),
     removeZone: (id) => after(db().from("zones").delete().eq("id", id)),
     addLandmark: async (l) => {
@@ -193,6 +206,19 @@ export function supabaseActions(refresh: () => void): Actions {
       const { data, error } = await db().from("container_takes").delete().eq("id", id).select("id");
       if (error) throw new Error(error.message);
       if (!data?.length) throw new Error("Das darfst du nicht. Löschen kann nur der Besitzer der Kiste oder ein Admin.");
+    },
+    listStats: async () => {
+      const { data, error } = await db().from("player_stats").select("uuid, name, stats, updated_at");
+      if (error?.code === "42P01" || error?.code === "PGRST205") throw new Error("Die Tabelle für Statistiken fehlt noch. Das SQL dafür muss einmal in Supabase laufen.");
+      if (error) throw new Error(error.message);
+      return (data ?? []) as PlayerStatsRow[];
+    },
+    subscribeStats: (onChange) => {
+      const channel = db().channel("stats").on("postgres_changes", { event: "*", schema: "public", table: "player_stats" }, onChange);
+      channel.subscribe();
+      return () => {
+        db().removeChannel(channel);
+      };
     },
   };
 }

@@ -19,6 +19,8 @@ Name im Amboss: Spielername → Besitz des Spielers, `Allgemein` → Allgemeingu
 
 Unbenannte Kisten: Unbenannte Kisten mit Inhalt aus den Zonen erscheinen in der Suche auf der Karte. Jeder kann eine anklicken und „Meine“ oder „Allgemeinheit“ wählen (zählt dann wie eine Kiste „Allgemein“); die Zuordnung hängt an der Position und übersteht neue Scans. Ungeöffnete Loot-Kisten tauchen nie auf, schon geöffnete lassen sich nicht von selbst gebauten unterscheiden. Solche Kisten blendet man mit „Keine Spielerkiste, ausblenden“ dauerhaft aus (wieder einblenden in der Suche unter dem Filter „Ausgeblendet“).
 
+Private Kiste: Unter „Konto“ macht jeder höchstens eine seiner Kisten privat. Andere Spieler und auch Admins sehen sie und ihren Inhalt dann nirgends mehr (Suche, Karte, Projekte); das prüft die Datenbank per RLS. Gehört die Kiste nicht mehr dem Spieler (umbenannt oder „Nicht meine“), ist sie wieder für alle sichtbar.
+
 ## Entnahmen aus fremden Kisten
 
 Vanilla merkt sich nicht, wer eine Kiste geöffnet hat. Der Sammler vergleicht deshalb jede Abfrage mit der vorherigen: Fehlt in einer Spielerkiste in einer Zone etwas, schaut er, welcher andere Online-Spieler in der Nähe war (Position per RCON) und genau dieses Item dazubekommen hat. Stufen: „sicher“ (an der Kiste und Item bekommen), „wahrscheinlich“ (Item bekommen, in Reichweite), „möglich“ (an der Kiste, Item aber nicht im Inventar). Entnahmen durch den Besitzer selbst und ohne fremden Spieler in der Nähe (Trichter) werden nicht gemeldet. Die Website zeigt sie unter „Entnahmen“, jeder sieht seine Kisten, Admins alle. Auf der Pi-Kachel abschaltbar.
