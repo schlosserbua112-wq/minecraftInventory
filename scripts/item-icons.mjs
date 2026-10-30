@@ -234,6 +234,6 @@ const login = `${(typeof name === "string" && name ? name : user).trim().toLower
 const { error: authError } = await db.auth.signInWithPassword({ email: login, password: pass });
 if (authError) throw new Error(`Anmeldung fehlgeschlagen: ${authError.message}`);
 
-const { error } = await db.storage.from("items").upload("icons.json", Buffer.from(json), { contentType: "application/json", cacheControl: "3600", upsert: true });
+const { error } = await db.storage.from("items").upload("icons.json", Buffer.from(json), { contentType: "application/json", cacheControl: "60", upsert: true });
 if (error) throw new Error(`Hochladen fehlgeschlagen: ${error.message}. Ist die SQL-Datei für den Bucket "items" ausgeführt und das Konto Admin?`);
 console.log("Hochgeladen. Die Website zeigt die Icons nach dem nächsten Neuladen.");
