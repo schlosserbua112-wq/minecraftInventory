@@ -7,7 +7,7 @@ Zeigt fast live, welche Ressourcen jeder Spieler auf unserer Vanilla-Welt hat, w
 | Ordner | Inhalt |
 |---|---|
 | `packages/core` | Gemeinsame Logik: Namensregeln, Zählen inkl. Shulkerboxen, Region-Berechnung, Materiallisten-Parser, Mock-Welt. Mit Tests. |
-| `apps/collector` | Sammler für den Pi. `MODE=mock` schreibt Beispieldaten, `MODE=live` (RCON + FTP) folgt, sobald der Server erreichbar ist. |
+| `apps/collector` | Sammler für den Pi. `MODE=mock` schreibt Beispieldaten, `MODE=live` liest den Server per RCON und Dateien (lokal oder FTP, nur lesend). |
 | `apps/web` | Website (Next.js). Ohne Supabase-Zugang läuft sie im Demo-Modus mit Beispieldaten. |
 | `supabase/` | Datenbankschema mit Zugriffsregeln und Beispiel-Seed. |
 | `deploy/pi/minecraft-tracker` | Docker-Compose für den Pi: eigener Container auf Port 8101, eigene Kachel im pi-dashboard. |
@@ -53,3 +53,12 @@ Hinweis: Auf dem Pi ist die Speicher-Cgroup abgeschaltet (`cgroup_disable=memory
 
 - RCON-Ausgaben und NBT-Format von Minecraft 26.3 an echten Dateien prüfen
 - `MODE=live`: Online-Spieler per RCON, Offline-Spieler aus `playerdata`, Kisten aus Region-Dateien der Zonen
+
+## Server umschalten (Testserver ↔ G-Portal)
+
+Der Sammler kennt den Minecraft-Server nur aus der .env. Vorlagen liegen in `deploy/server-profiles/`:
+
+- `testserver.env.example`: lokaler Vanilla-Server auf ValePC, Dateien direkt aus dem Server-Ordner. Als `apps/collector/.env.testserver` ablegen, RCON-Passwort eintragen, dann `npm run live:test`.
+- `gportal.env.example`: echter Server, Dateien per FTP. Den Block in `/etc/minecraft-tracker.env` auf dem Pi einfügen, Werte aus dem G-Portal-Panel eintragen, `docker compose up -d` in `/opt/apps/minecraft-tracker`.
+
+Am Code ändert sich beim Umschalten nichts. Fehlen Angaben, meldet der Sammler beim Start genau, welche.

@@ -5,3 +5,9 @@ dist/
 .env.local
 *.tsbuildinfo
 next-env.d.ts
+.env.*
+!.env.example
+!.env.production
+*.env
+!*.env.example
+settings.*.json

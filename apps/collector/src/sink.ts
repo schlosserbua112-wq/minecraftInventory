@@ -4,10 +4,25 @@ import { regionOf, type AggregateResult, type ContainerSnapshot, type PlayerSnap
 /** Ziel für die gesammelten Daten. */
 export interface Sink {
   write(players: PlayerSnapshot[], containers: ContainerSnapshot[], result: AggregateResult, historyMinutes?: number): Promise<void>;
-  heartbeat(mode: string, message?: string): Promise<void>;
+  heartbeat(mode: string, message?: string, extra?: HeartbeatExtra): Promise<void>;
   /** Offene "Jetzt suchen"-Anfragen abholen und als gestartet markieren. */
   takeScanRequests(): Promise<number[]>;
   finishScanRequests(ids: number[], result: string): Promise<void>;
+  /** Zonen aus der Verwaltung der Website. */
+  loadZones(): Promise<Zone[]>;
+}
+
+export interface HeartbeatExtra {
+  last_zone_scan_at?: string;
+  last_full_scan_at?: string;
+}
+
+export interface Zone {
+  name: string;
+  dimension: string;
+  center_x: number;
+  center_z: number;
+  radius: number;
 }
 
 const key = (r: Pick<StockRow, "source_kind" | "source_id" | "item_id">) => `${r.source_kind}|${r.source_id}|${r.item_id}`;
@@ -91,10 +106,10 @@ export class SupabaseSink implements Sink {
     this.lastHistorySlot = stamp;
   }
 
-  async heartbeat(mode: string, message?: string) {
+  async heartbeat(mode: string, message?: string, extra: HeartbeatExtra = {}) {
     const now = new Date().toISOString();
     await this.check(
-      this.db.from("collector_status").upsert({ id: 1, heartbeat_at: now, last_live_poll_at: now, mode, message: message ?? null, version: "0.1.0" }),
+      this.db.from("collector_status").upsert({ id: 1, heartbeat_at: now, last_live_poll_at: now, mode, message: message ?? null, version: "0.2.0", ...extra }),
     );
   }
 
@@ -109,6 +124,12 @@ export class SupabaseSink implements Sink {
   async finishScanRequests(ids: number[], result: string) {
     if (!ids.length) return;
     await this.check(this.db.from("scan_requests").update({ finished_at: new Date().toISOString(), result }).in("id", ids));
+  }
+
+  async loadZones() {
+    const { data, error } = await this.db.from("zones").select("name, dimension, center_x, center_z, radius");
+    if (error) throw error;
+    return (data ?? []) as Zone[];
   }
 
   private async check(q: PromiseLike<{ error: unknown }>) {
@@ -128,4 +149,9 @@ export class ConsoleSink implements Sink {
     return [];
   }
   async finishScanRequests() {}
+  /** Ohne Supabase: Zonen aus ZONES (JSON) oder eine Testzone um 0/0. */
+  async loadZones(): Promise<Zone[]> {
+    if (process.env.ZONES) return JSON.parse(process.env.ZONES) as Zone[];
+    return [{ name: "Test", dimension: "minecraft:overworld", center_x: 0, center_z: 0, radius: 256 }];
+  }
 }
