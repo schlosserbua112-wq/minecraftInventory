@@ -11,6 +11,8 @@ export interface MapPin {
   x: number;
   z: number;
   ownerType: OwnerType;
+  /** Eigene Farbe, z. B. je Spieler; sonst die Farbe der Besitzart */
+  color?: string;
   label?: string;
   title: string;
 }
@@ -46,6 +48,7 @@ export function MapView({
   selectedId,
   onSelect,
   focus,
+  legend,
 }: {
   pins: MapPin[];
   zones: ZoneRow[];
@@ -53,6 +56,8 @@ export function MapView({
   onSelect?: (id: string) => void;
   /** Ändert sich der Schlüssel, passt sich die Ansicht neu an. */
   focus?: string;
+  /** Eigene Legende statt der Besitzarten */
+  legend?: { label: string; color: string }[];
 }) {
   const box = useRef<HTMLDivElement>(null);
   const world = useWorldMap();
@@ -114,7 +119,7 @@ export function MapView({
   const tiles = showWorld ? world.tiles.filter((t) => t.x + 512 > x0 && t.x < x0 + view.w && t.z + 512 > z0 && t.z < z0 + h) : [];
   const showChunks = view.w / 16 < 120;
   const pinSize = 24 * k;
-  const usedTypes = [...new Set(pins.map((p) => p.ownerType))];
+  const legendItems = legend ?? [...new Set(pins.map((p) => p.ownerType))].map((t) => ({ label: OWNER_LABEL[t], color: OWNER_COLOR[t] }));
 
   return (
     <div
@@ -172,7 +177,7 @@ export function MapView({
                 width={s}
                 height={s}
                 rx={3 * k}
-                fill={OWNER_COLOR[p.ownerType]}
+                fill={p.color ?? OWNER_COLOR[p.ownerType]}
                 stroke={sel ? "#fff" : "#000"}
                 strokeOpacity={sel ? 1 : 0.35}
                 strokeWidth={(sel ? 3 : 1) * k}
@@ -209,12 +214,12 @@ export function MapView({
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
         </button>
       </div>
-      {usedTypes.length > 0 && (
+      {legendItems.length > 0 && (
         <div className="map-legend">
-          {usedTypes.map((t) => (
-            <span key={t} className="badge">
-              <span className="dot" style={{ background: OWNER_COLOR[t] }} />
-              {OWNER_LABEL[t]}
+          {legendItems.map((l) => (
+            <span key={l.label} className="badge">
+              <span className="dot" style={{ background: l.color }} />
+              {l.label}
             </span>
           ))}
         </div>
