@@ -1,5 +1,6 @@
 import { aggregate, createMockWorld } from "@mc/core";
 import { loadConfig } from "./config.js";
+import { startHealthServer, type HealthState } from "./health.js";
 import { ConsoleSink, SupabaseSink, type Sink } from "./sink.js";
 
 const config = loadConfig();
@@ -21,6 +22,9 @@ async function main() {
     throw new Error("MODE=live ist noch nicht umgesetzt. Bitte MODE=mock verwenden.");
   }
 
+  const health: HealthState = { mode: config.mode, startedAt: new Date().toISOString(), lastRunAt: null, lastError: null, rows: 0, unassigned: 0 };
+  const server = startHealthServer(config.httpPort, health, config.siteUrl);
+
   const world = createMockWorld();
   let stopping = false;
   const stop = () => {
@@ -39,12 +43,15 @@ async function main() {
       const scans = await sink.takeScanRequests();
       await sink.finishScanRequests(scans, "Mock: keine neuen Kisten gefunden");
       await sink.heartbeat("mock");
+      Object.assign(health, { lastRunAt: new Date().toISOString(), lastError: null, rows: result.rows.length, unassigned: result.unassigned.length });
     } catch (err) {
       console.error("Fehler im Durchlauf:", err);
+      health.lastError = err instanceof Error ? err.message : String(err);
     }
     const wait = Math.max(config.pollSeconds * 1000 - (Date.now() - started), 1000);
     await new Promise((r) => setTimeout(r, wait));
   }
+  server.close();
   console.log("Beendet.");
 }
 
