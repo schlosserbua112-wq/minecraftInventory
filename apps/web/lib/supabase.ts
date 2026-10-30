@@ -25,7 +25,7 @@ async function all<T>(table: string, columns = "*"): Promise<T[]> {
 }
 
 export async function loadSnapshot(): Promise<Snapshot> {
-  const [players, containers, stock, zones, status, scans, settings] = await Promise.all([
+  const [players, containers, stock, zones, status, scans, settings, landmarks] = await Promise.all([
     all<Snapshot["players"][number]>("players", "uuid, name, online, last_seen"),
     all<Snapshot["containers"][number]>("containers", "id, dimension, x, y, z, kind, custom_name, owner_type, owner_key, owner_label"),
     all<StockRow>("stock_items", "source_kind, source_id, owner_type, owner_key, owner_label, item_id, count"),
@@ -34,9 +34,11 @@ export async function loadSnapshot(): Promise<Snapshot> {
     supabase().from("scan_requests").select("id, requested_at, finished_at, result").order("requested_at", { ascending: false }).limit(5),
     // Fehlt die Tabelle noch (SQL nicht ausgeführt), bleibt der Schalter einfach aus
     supabase().from("app_settings").select("show_unnamed").eq("id", 1).maybeSingle(),
+    // Ebenso: ohne Tabelle einfach keine Landmarks
+    supabase().from("landmarks").select("id, name, color, x, z, created_by").order("name"),
   ]);
   return {
-    players, containers, stock, zones, status: status[0] ?? null, scans: scans.data ?? [],
+    players, containers, stock, zones, landmarks: landmarks.data ?? [], status: status[0] ?? null, scans: scans.data ?? [],
     showUnnamed: Boolean(settings.data?.show_unnamed),
   };
 }
@@ -44,7 +46,7 @@ export async function loadSnapshot(): Promise<Snapshot> {
 /** Ruft `onChange` auf, wenn sich Bestände, Spieler, Status oder Einstellungen ändern. */
 export function subscribeChanges(onChange: () => void): () => void {
   const channel = supabase().channel("tracker");
-  for (const table of ["stock_items", "players", "collector_status", "scan_requests", "app_settings", "container_claims"]) {
+  for (const table of ["stock_items", "players", "collector_status", "scan_requests", "app_settings", "container_claims", "landmarks", "zones"]) {
     channel.on("postgres_changes", { event: "*", schema: "public", table }, onChange);
   }
   channel.subscribe();
@@ -65,6 +67,15 @@ function dashError(e: { code?: string; message: string }) {
   return e.code === "42P01" || e.code === "PGRST205" ? "Die Tabelle für Dashboards fehlt noch. Das SQL dafür muss einmal in Supabase laufen." : e.message;
 }
 
+/** Fehlt die Tabelle noch, sagt die Meldung, was zu tun ist; RLS-Fehler werden verständlich. */
+async function landmarkOk(q: PromiseLike<{ error: { code?: string; message: string } | null }>) {
+  const { error } = await q;
+  if (!error) return;
+  if (error.code === "42P01" || error.code === "PGRST205") throw new Error("Die Tabelle für Landmarks fehlt noch. Das SQL dafür muss einmal in Supabase laufen.");
+  if (error.code === "42501") throw new Error("Das darfst du nicht. Ändern und löschen kann nur, wer das Landmark gesetzt hat, oder ein Admin.");
+  throw new Error(error.message);
+}
+
 export function supabaseActions(refresh: () => void): Actions {
   const db = () => supabase();
   const after = async (q: PromiseLike<{ error: unknown }>) => {
@@ -75,6 +86,21 @@ export function supabaseActions(refresh: () => void): Actions {
     requestScan: () => after(db().from("scan_requests").insert({})),
     addZone: (z) => after(db().from("zones").insert(z)),
     removeZone: (id) => after(db().from("zones").delete().eq("id", id)),
+    addLandmark: async (l) => {
+      await landmarkOk(db().from("landmarks").insert(l));
+      refresh();
+    },
+    updateLandmark: async (id, l) => {
+      // Ohne Recht liefert ein Update einfach 0 Zeilen, deshalb die Zeile zurückverlangen
+      const { data, error } = await db().from("landmarks").update(l).eq("id", id).select("id");
+      await landmarkOk(Promise.resolve({ error: error ?? (data?.length ? null : { code: "42501", message: "" }) }));
+      refresh();
+    },
+    removeLandmark: async (id) => {
+      const { data, error } = await db().from("landmarks").delete().eq("id", id).select("id");
+      await landmarkOk(Promise.resolve({ error: error ?? (data?.length ? null : { code: "42501", message: "" }) }));
+      refresh();
+    },
     loadHistory: async (itemId, days) => {
       const since = new Date(Date.now() - days * 86400_000).toISOString();
       const { data, error } = await db()

@@ -57,6 +57,8 @@ export default function SearchPage() {
   const [selected, setSelected] = useState<string | null>(null);
   /** Auf der Karte angeklickte Kiste: zeigt Inhalt und Besitzer statt der Liste. */
   const [chest, setChest] = useState<string | null>(null);
+  /** Landmark aus der Suche, zu dem die Karte springt */
+  const [jump, setJump] = useState<{ id: number; n: number } | undefined>(undefined);
 
   // Modus im Link merken (?modus=spieler), damit er Neuladen übersteht
   useEffect(() => {
@@ -85,6 +87,10 @@ export default function SearchPage() {
     for (const r of rows) m.set(r.item_id, [...(m.get(r.item_id) ?? []), r]);
     return m;
   }, [rows]);
+  const landmarkHits = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return q && snapshot ? snapshot.landmarks.filter((l) => l.name.toLowerCase().includes(q)).slice(0, 8) : [];
+  }, [snapshot, query]);
   const places = useMemo(() => (snapshot && item ? placesOf(snapshot, rows, item) : []), [snapshot, rows, item]);
 
   const pins: MapPin[] = useMemo(() => {
@@ -159,7 +165,7 @@ export default function SearchPage() {
       <section className="side side-wide" aria-label="Suche" style={{ "--side-w": `${Math.max(sideWidth(columns.length), 520)}px` } as CSSProperties}>
         <label className="search">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{ color: "var(--muted)" }}><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
-          <span className="sr-only">Item suchen</span>
+          <span className="sr-only">Item oder Landmark suchen</span>
           <input
             type="search"
             placeholder={mode === "players" && picked.length === 1 && picked[0].isMe ? "Wo liegen meine Diamanten?" : "Wo liegen unsere Diamanten?"}
@@ -243,47 +249,71 @@ export default function SearchPage() {
             onBack={() => setItem(null)}
             color={(r) => colorOf(r, scope, owners)}
           />
-        ) : results.length === 0 ? (
-          <p className="empty">{emptyText}</p>
         ) : (
-          <div className="table-wrap">
-            <table className="compare">
-              <thead>
-                <tr>
-                  <th>Item</th>
-                  {columns.map((c) => (
-                    <th key={c.key} className="r">
-                      <span className="badge">
-                        <span className="dot" style={{ background: c.color }} />
-                        {c.label}
-                      </span>
-                    </th>
-                  ))}
-                  <th className="r">{columns.length ? "Summe" : "Menge"}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.slice(0, 200).map((t) => {
-                  const r = rowsByItem.get(t.item_id) ?? [];
-                  return (
-                    <tr key={t.item_id} onClick={() => setItem(t.item_id)}>
-                      <td>
-                        <button type="button" className="cell-btn" onClick={() => setItem(t.item_id)}>
-                          <ItemIcon id={t.item_id} size={20} />
-                          {itemName(t.item_id)}
-                        </button>
-                      </td>
-                      {columns.map((c) => {
-                        const n = c.count(r);
-                        return <td key={c.key} className={n ? "r" : "r faint"}>{n ? fmt.format(n) : "–"}</td>;
-                      })}
-                      <td className="r strong">{fmt.format(t.count)}</td>
+          <>
+            {landmarkHits.length > 0 && (
+              <div className="list" aria-label="Landmarks">
+                {landmarkHits.map((l) => (
+                  <button
+                    key={l.id}
+                    type="button"
+                    className="item-row"
+                    aria-current={jump?.id === l.id}
+                    onClick={() => setJump((j) => ({ id: l.id, n: (j?.n ?? 0) + 1 }))}
+                  >
+                    <span className="place-dot" style={{ background: l.color }} />
+                    <span className="grow">
+                      <span>{l.name}</span>
+                      <span className="sub">Landmark · {l.x} / {l.z}</span>
+                    </span>
+                    <span className="faint small">Auf Karte zeigen</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            {results.length === 0 ? (
+              landmarkHits.length === 0 && <p className="empty">{emptyText}</p>
+            ) : (
+              <div className="table-wrap">
+                <table className="compare">
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      {columns.map((c) => (
+                        <th key={c.key} className="r">
+                          <span className="badge">
+                            <span className="dot" style={{ background: c.color }} />
+                            {c.label}
+                          </span>
+                        </th>
+                      ))}
+                      <th className="r">{columns.length ? "Summe" : "Menge"}</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  </thead>
+                  <tbody>
+                    {results.slice(0, 200).map((t) => {
+                      const r = rowsByItem.get(t.item_id) ?? [];
+                      return (
+                        <tr key={t.item_id} onClick={() => setItem(t.item_id)}>
+                          <td>
+                            <button type="button" className="cell-btn" onClick={() => setItem(t.item_id)}>
+                              <ItemIcon id={t.item_id} size={20} />
+                              {itemName(t.item_id)}
+                            </button>
+                          </td>
+                          {columns.map((c) => {
+                            const n = c.count(r);
+                            return <td key={c.key} className={n ? "r" : "r faint"}>{n ? fmt.format(n) : "–"}</td>;
+                          })}
+                          <td className="r strong">{fmt.format(t.count)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
         )}
       </section>
 
@@ -311,6 +341,7 @@ export default function SearchPage() {
           onSelect={pickPin}
           focus={`${item ?? "all"}|${mode}|${keyList}`}
           legend={mode === "players" ? picked.map((o) => ({ label: o.isMe ? `${o.label} (ich)` : o.label, color: o.color })) : undefined}
+          target={jump}
         />
       </section>
     </main>
