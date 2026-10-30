@@ -17,11 +17,11 @@ import type { Settings } from "./settings.js";
 import type { Zone } from "./sink.js";
 import type { WorldFiles } from "./worldfiles.js";
 
-/** Mögliche Ordner der Region-Dateien je Dimension (klassisch und neueres Layout). */
+/** Ordner der Region-Dateien je Dimension: 26.3-Layout zuerst (am Testserver gesehen), dann das alte. */
 const REGION_DIRS: Record<string, string[]> = {
-  "minecraft:overworld": ["region", "dimensions/minecraft/overworld/region"],
-  "minecraft:the_nether": ["DIM-1/region", "dimensions/minecraft/the_nether/region"],
-  "minecraft:the_end": ["DIM1/region", "dimensions/minecraft/the_end/region"],
+  "minecraft:overworld": ["dimensions/minecraft/overworld/region", "region"],
+  "minecraft:the_nether": ["dimensions/minecraft/the_nether/region", "DIM-1/region"],
+  "minecraft:the_end": ["dimensions/minecraft/the_end/region", "DIM1/region"],
 };
 
 const KIND_IDS: Record<ContainerSnapshot["kind"], string> = {
@@ -230,9 +230,15 @@ export class LiveCollector {
   }
 
   private async loadOfflinePlayers() {
-    const dir = `${this.server.level}/playerdata`;
+    // 26.3: <welt>/players/data/<uuid>.dat, ältere Versionen: <welt>/playerdata/<uuid>.dat
+    let dir = `${this.server.level}/players/data`;
+    let files = await this.files.list(dir);
+    if (!files.some((f) => f.endsWith(".dat"))) {
+      dir = `${this.server.level}/playerdata`;
+      files = await this.files.list(dir);
+    }
     const next = new Map<string, PlayerSnapshot>();
-    for (const file of await this.files.list(dir)) {
+    for (const file of files) {
       const m = /^([0-9a-f-]{36})\.dat$/i.exec(file);
       if (!m) continue;
       const uuid = m[1]!.toLowerCase();
