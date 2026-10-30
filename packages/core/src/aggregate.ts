@@ -35,16 +35,18 @@ const UNNAMED_OWNER: Record<Exclude<UnnamedRule, "ignore">, Owner> = {
   unassigned: { type: "unassigned", key: "unbenannt", label: "Unbenannt" },
 };
 
-/** Macht aus Spieler- und Kisten-Snapshots die Zeilen für `stock_items`. */
 /**
+ * Macht aus Spieler- und Kisten-Snapshots die Zeilen für `stock_items`.
  * `owners`: Konten mit Aliasen, als Map von Name/Alias (klein geschrieben) auf den Kontonamen.
  * Ein Spieler, dessen Minecraft-Name ein Alias ist, gehört dann zum Konto.
+ * `claims`: unbenannte Kisten, die ein Spieler auf der Website als „Meine“ markiert hat, Kisten-ID → Kontoname.
  */
 export function aggregate(
   players: PlayerSnapshot[],
   containers: ContainerSnapshot[],
   unnamed: UnnamedRule = "ignore",
   owners: ReadonlyMap<string, string> = new Map(),
+  claims: ReadonlyMap<string, string> = new Map(),
 ): AggregateResult {
   const names = new Map<string, string>();
   for (const p of players) names.set(p.name.toLowerCase(), owners.get(p.name.toLowerCase()) ?? p.name);
@@ -62,6 +64,8 @@ export function aggregate(
 
   for (const c of containers) {
     let owner = classifyName(c.customName, names);
+    const claim = c.customName ? undefined : claims.get(c.id);
+    if (!owner && claim) owner = { type: "player", key: claim.toLowerCase(), label: claim };
     if (!owner && unnamed !== "ignore" && !c.generated && c.items.length) owner = UNNAMED_OWNER[unnamed];
     if (!owner) continue;
     byContainer.set(c.id, owner);

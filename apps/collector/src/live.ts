@@ -53,6 +53,7 @@ export interface LiveResult {
  */
 export class LiveCollector {
   private rcon?: Rcon;
+  private rconQueue: Promise<unknown> = Promise.resolve();
   /** Kisten in Zonen, werden live per RCON nachgelesen. */
   private zoneContainers = new Map<string, ContainerSnapshot>();
   /** Kisten außerhalb der Zonen, Stand aus dem letzten Vollscan. */
@@ -68,18 +69,29 @@ export class LiveCollector {
 
   constructor(private server: ServerConfig, private files: WorldFiles) {}
 
-  private async rconCommand(cmd: string): Promise<string> {
+  /**
+   * Befehle laufen nacheinander, auch wenn Zonen-Scan (save-all) und Abfrage gleichzeitig senden.
+   * Sonst bauen beide eine Verbindung auf oder räumen dieselbe zweimal ab.
+   */
+  private rconCommand(cmd: string): Promise<string> {
+    const run = this.rconQueue.then(() => this.rconCommandNow(cmd));
+    this.rconQueue = run.catch(() => {});
+    return run;
+  }
+
+  private async rconCommandNow(cmd: string): Promise<string> {
     if (!this.rcon) {
       const { host, port, password } = this.server.rcon;
       const r = new Rcon(host!, port, password!);
       await r.connect();
       this.rcon = r;
     }
+    const r = this.rcon;
     try {
-      return await withTimeout(this.rcon.command(cmd), 10_000, `RCON-Befehl "${cmd}"`);
+      return await withTimeout(r.command(cmd), 10_000, `RCON-Befehl "${cmd}"`);
     } catch (err) {
-      this.rcon.close();
-      this.rcon = undefined;
+      r.close();
+      if (this.rcon === r) this.rcon = undefined;
       throw err;
     }
   }
@@ -99,8 +111,11 @@ export class LiveCollector {
     this.files.close();
   }
 
-  /** Eine Abfrage: Spieler und Zonen-Kisten live. */
-  async poll(s: Settings): Promise<LiveResult> {
+  /**
+   * Eine Abfrage: Spieler und Zonen-Kisten live.
+   * `wantUnnamed`: welche unbenannten Kisten gebraucht werden; die übrigen fragt RCON gar nicht erst ab.
+   */
+  async poll(s: Settings, wantUnnamed: (c: ContainerSnapshot) => boolean = () => true): Promise<LiveResult> {
     const players: PlayerSnapshot[] = [];
     const online = parsePlayerList(await this.rconCommand("list uuids"));
     const onlineIds = new Set(online.map((p) => p.uuid));
@@ -141,6 +156,7 @@ export class LiveCollector {
 
     if (s.sources.zoneChests) {
       for (const c of [...this.zoneContainers.values()]) {
+        if (!c.customName && !wantUnnamed(c)) continue;
         let data, res;
         try {
           ({ data, res } = await this.dataGet(`execute in ${c.dimension} run data get block ${c.x} ${c.y} ${c.z}`, `${c.x}, ${c.y}, ${c.z}`));
@@ -161,7 +177,7 @@ export class LiveCollector {
     }
 
     const containers = [
-      ...(s.sources.zoneChests ? this.zoneContainers.values() : []),
+      ...(s.sources.zoneChests ? [...this.zoneContainers.values()].filter((c) => c.customName || wantUnnamed(c)) : []),
       ...(s.sources.fullScan ? this.outsideContainers.values() : []),
     ];
     return { players, containers };
@@ -183,8 +199,8 @@ export class LiveCollector {
       if (s.sources.zoneChests) {
         const next = new Map<string, ContainerSnapshot>();
         for (const zone of zones) {
-          const keepUnnamed = s.unnamedChests !== "ignore";
-          for (const c of await this.containersInRegions(zone.dimension, regionsForZone(zone.center_x, zone.center_z, zone.radius), keepUnnamed)) {
+          // Unbenannte immer mitnehmen: ob sie zählen, entscheiden Website-Schalter und „Meine“-Markierungen je Abfrage
+          for (const c of await this.containersInRegions(zone.dimension, regionsForZone(zone.center_x, zone.center_z, zone.radius), true)) {
             if ((c.x - zone.center_x) ** 2 + (c.z - zone.center_z) ** 2 > zone.radius ** 2) continue;
             if (!this.zoneContainers.has(c.id)) found++;
             // Live-Stand behalten, falls schon bekannt (Datei kann bis zum nächsten Autosave älter sein)

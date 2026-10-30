@@ -24,6 +24,8 @@ export interface Snapshot {
   tasks: TaskRow[];
   status: StatusRow | null;
   scans: ScanRow[];
+  /** Admin-Schalter: unbenannte Kisten auf der Website zeigen und per „Meine“ zuordnen lassen. */
+  showUnnamed: boolean;
 }
 
 export interface Actions {
@@ -38,6 +40,9 @@ export interface Actions {
   updateTask(id: number, patch: Partial<Omit<TaskRow, "id">>): Promise<void>;
   removeTask(id: number): Promise<void>;
   loadHistory(itemId: string, days: number): Promise<HistoryRow[]>;
+  /** Unbenannte Kiste als „Meine“ (true) oder „Nicht meine“ (false) markieren. */
+  claimContainer(id: string, mine: boolean): Promise<void>;
+  setShowUnnamed(on: boolean): Promise<void>;
 }
 
 export const TASK_STATUS: { id: TaskStatus; label: string }[] = [

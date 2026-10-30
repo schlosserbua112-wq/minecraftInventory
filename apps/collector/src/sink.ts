@@ -12,6 +12,13 @@ export interface Sink {
   loadZones(): Promise<Zone[]>;
   /** Kontonamen und Aliase, klein geschrieben → Kontoname. */
   loadOwners(): Promise<Map<string, string>>;
+  /** Website-Schalter für unbenannte Kisten und „Meine“-Markierungen (Kisten-ID → Kontoname). */
+  loadUnnamed(): Promise<UnnamedState>;
+}
+
+export interface UnnamedState {
+  show: boolean;
+  claims: Map<string, string>;
 }
 
 export interface HeartbeatExtra {
@@ -34,6 +41,8 @@ export class SupabaseSink implements Sink {
   private db: SupabaseClient;
   private last = new Map<string, StockRow>();
   private lastHistorySlot = "";
+  /** Unbenannte Kisten aus dem letzten Lauf, um verschwundene aus `containers` zu löschen. */
+  private lastUnnamed: string | null = null;
 
   constructor(url: string, serviceKey: string) {
     this.db = createClient(url, serviceKey, { auth: { persistSession: false } });
@@ -69,6 +78,16 @@ export class SupabaseSink implements Sink {
           }),
         ),
       );
+    }
+
+    // Unbenannte Kisten, die nicht mehr zählen (Schalter aus, abgebaut, leer), aus der Kistenliste nehmen
+    const unnamedIds = named.filter((c) => !c.customName).map((c) => c.id).sort();
+    const unnamedKey = unnamedIds.join(",");
+    if (unnamedKey !== this.lastUnnamed) {
+      let q = this.db.from("containers").delete().is("custom_name", null);
+      if (unnamedIds.length) q = q.not("id", "in", `(${unnamedIds.map((id) => `"${id}"`).join(",")})`);
+      await this.check(q);
+      this.lastUnnamed = unnamedKey;
     }
 
     const next = new Map(result.rows.map((r) => [key(r), r]));
@@ -145,6 +164,20 @@ export class SupabaseSink implements Sink {
     return m;
   }
 
+  async loadUnnamed() {
+    const [settings, claims] = await Promise.all([
+      this.db.from("app_settings").select("show_unnamed").eq("id", 1).maybeSingle(),
+      this.db.from("container_claims").select("container_id, profiles(username)"),
+    ]);
+    // Tabellen fehlen noch (SQL nicht ausgeführt): Funktion bleibt aus, Sammler läuft weiter
+    if (settings.error || claims.error) return { show: false, claims: new Map<string, string>() };
+    const m = new Map<string, string>();
+    for (const c of (claims.data ?? []) as unknown as { container_id: string; profiles: { username: string } | null }[]) {
+      if (c.profiles) m.set(c.container_id, c.profiles.username);
+    }
+    return { show: Boolean(settings.data?.show_unnamed), claims: m };
+  }
+
   private async check(q: PromiseLike<{ error: unknown }>) {
     const { error } = await q;
     if (error) throw error;
@@ -169,5 +202,8 @@ export class ConsoleSink implements Sink {
   }
   async loadOwners() {
     return new Map<string, string>();
+  }
+  async loadUnnamed() {
+    return { show: false, claims: new Map<string, string>() };
   }
 }
