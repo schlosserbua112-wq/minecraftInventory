@@ -161,6 +161,12 @@ export class LiveCollector {
   async zoneScan(zones: Zone[], s: Settings): Promise<number> {
     let found = 0;
     try {
+      // Welt zuerst speichern, sonst sieht der Scan neue Kisten erst nach dem nächsten Autosave
+      try {
+        await this.rconCommand("save-all flush");
+      } catch (err) {
+        console.warn(`[live] save-all: ${err instanceof Error ? err.message : String(err)}`);
+      }
       await this.files.open();
       await this.loadNames();
       if (s.sources.offlinePlayers) await this.loadOfflinePlayers();
