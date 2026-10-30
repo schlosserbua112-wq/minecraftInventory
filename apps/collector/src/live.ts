@@ -164,7 +164,8 @@ export class LiveCollector {
       if (s.sources.zoneChests) {
         const next = new Map<string, ContainerSnapshot>();
         for (const zone of zones) {
-          for (const c of await this.containersInRegions(zone.dimension, regionsForZone(zone.center_x, zone.center_z, zone.radius))) {
+          const keepUnnamed = s.unnamedChests !== "ignore";
+          for (const c of await this.containersInRegions(zone.dimension, regionsForZone(zone.center_x, zone.center_z, zone.radius), keepUnnamed)) {
             if ((c.x - zone.center_x) ** 2 + (c.z - zone.center_z) ** 2 > zone.radius ** 2) continue;
             if (!this.zoneContainers.has(c.id)) found++;
             // Live-Stand behalten, falls schon bekannt (Datei kann bis zum nächsten Autosave älter sein)
@@ -221,7 +222,8 @@ export class LiveCollector {
     return null; // nicht merken: Dimension kann später entstehen
   }
 
-  private async containersInRegions(dimension: string, regionFiles: string[]): Promise<ContainerSnapshot[]> {
+  /** `keepUnnamed`: auch unbenannte, nicht generierte Kisten mit Inhalt behalten (nur in Zonen). */
+  private async containersInRegions(dimension: string, regionFiles: string[], keepUnnamed = false): Promise<ContainerSnapshot[]> {
     const dir = await this.regionDir(dimension);
     if (!dir) return [];
     const existing = new Set(await this.files.list(dir));
@@ -231,7 +233,9 @@ export class LiveCollector {
       const buf = await this.files.read(`${dir}/${file}`);
       for (const chunk of eachRegionChunk(buf, (i, err) => console.warn(`[scan] ${file} Chunk ${i}: ${String(err)}`))) {
         // Unbenannte Kisten zählen laut Namensregeln nicht; weglassen spart Speicher und RCON-Abfragen
-        for (const c of containersFromChunk(chunk, dimension)) if (c.customName) out.push(c);
+        for (const c of containersFromChunk(chunk, dimension)) {
+          if (c.customName || (keepUnnamed && !c.generated && c.items.length)) out.push(c);
+        }
       }
     }
     return out;

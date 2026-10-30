@@ -33,6 +33,8 @@ export interface ContainerSnapshot {
   kind: ContainerKind;
   /** Klartext des Amboss-Namens, `null` wenn unbenannt. */
   customName: string | null;
+  /** Generierte Kiste, die noch nie geöffnet wurde (hat eine Loot-Tabelle statt Items). */
+  generated?: boolean;
   items: ItemStack[];
 }
 

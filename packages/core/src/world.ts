@@ -42,7 +42,7 @@ export function containerFromBlockEntity(raw: unknown, dimension: string, fallba
   const z = Number(be.z ?? fallbackPos?.z);
   if (![x, y, z].every(Number.isFinite)) return null;
   const name = be.CustomName == null ? "" : plainText(be.CustomName).trim();
-  return { id: containerId(dimension, x, y, z), dimension, x, y, z, kind, customName: name || null, items: itemList(be.Items) };
+  return { id: containerId(dimension, x, y, z), dimension, x, y, z, kind, customName: name || null, items: itemList(be.Items), generated: be.LootTable != null };
 }
 
 /** Alle gezählten Behälter eines Chunks aus einer Region-Datei. */

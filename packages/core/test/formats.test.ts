@@ -87,3 +87,20 @@ describe("echte RCON-Antworten von G-Portal (26.3, Fabric)", () => {
     expect(text).toContain("VoisuffVale0810 (be6a62d9-5a99-4429-9e1b-0933842be448)");
   });
 });
+
+describe("unbenannte Kisten", () => {
+  it("zählen je nach Einstellung, generierte Loot-Kisten nie", async () => {
+    const { aggregate } = await import("../src/index.js");
+    const base = { dimension: "minecraft:overworld", y: 64, z: 0, kind: "chest" as const, customName: null };
+    const chests = [
+      { ...base, id: "a", x: 1, items: [{ id: "minecraft:stone", count: 5 }] },
+      { ...base, id: "b", x: 2, items: [{ id: "minecraft:gold_ingot", count: 1 }], generated: true },
+      { ...base, id: "c", x: 3, items: [] },
+    ];
+    expect(aggregate([], chests).rows).toHaveLength(0);
+    expect(aggregate([], chests, "common").rows).toEqual([expect.objectContaining({ source_id: "a", owner_type: "common", count: 5 })]);
+    const r = aggregate([], chests, "unassigned");
+    expect(r.rows[0]).toMatchObject({ owner_type: "unassigned", owner_label: "Unbenannt" });
+    expect(r.unassigned).toHaveLength(0);
+  });
+});

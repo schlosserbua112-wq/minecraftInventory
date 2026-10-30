@@ -112,6 +112,7 @@ input[type=checkbox]:checked::after{transform:translateX(18px);background:#20251
 .num{display:flex;align-items:center;gap:8px;flex:0 0 auto}
 .num input{width:84px;height:38px;padding:0 10px;background:var(--field);color:var(--text);border:1px solid #46503b;border-radius:4px;font:inherit;text-align:right;font-variant-numeric:tabular-nums}
 .num span{color:var(--muted);font-size:13px;width:62px}
+select{height:38px;padding:0 10px;background:var(--field);color:var(--text);border:1px solid #46503b;border-radius:4px;font:inherit}
 .actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
 button{min-height:42px;padding:0 18px;border-radius:4px;font:inherit;font-weight:600;cursor:pointer;border:1px solid var(--accent);background:var(--accent);color:#20251f}
 button.ghost{background:transparent;color:var(--text);border-color:#46503b}
@@ -140,6 +141,7 @@ button:disabled{opacity:.5;cursor:default}
   <label class="row"><span class="txt">Offline-Spieler<small>Inventare und Enderkisten aus den Spielerdaten per FTP</small></span><input type="checkbox" name="offlinePlayers"></label>
   <label class="row"><span class="txt">Kisten in den Zonen<small>Bekannte Kisten, Fässer und Shulkerkisten, per RCON</small></span><input type="checkbox" name="zoneChests"></label>
   <label class="row"><span class="txt">Vollscan der Welt<small>Alle Region-Dateien nach neuen Kisten durchsuchen, per FTP</small></span><input type="checkbox" name="fullScan"></label>
+  <label class="row"><span class="txt">Unbenannte Kisten in Zonen<small>Kisten ohne Namen, aber mit Inhalt. Ungeöffnete Loot-Kisten zählen nie.</small></span><select name="unnamedChests"><option value="ignore">ignorieren</option><option value="common">als Allgemein zählen</option><option value="unassigned">als „Unbenannt“ zeigen</option></select></label>
 </section>
 
 <section>
@@ -186,6 +188,7 @@ function fill(data) {
     el.min = data.limits[k][0]; el.max = data.limits[k][1]; el.value = s[k];
   }
   form.elements.paused.checked = s.paused;
+  form.elements.unnamedChests.value = s.unnamedChests;
   dirty = false;
 }
 
@@ -215,7 +218,7 @@ async function load(withForm) {
 function collect() {
   const sources = {};
   for (const k of SOURCES) sources[k] = form.elements[k].checked;
-  const s = { sources, paused: form.elements.paused.checked };
+  const s = { sources, paused: form.elements.paused.checked, unnamedChests: form.elements.unnamedChests.value };
   for (const k of NUMBERS) s[k] = Number(form.elements[k].value);
   return s;
 }

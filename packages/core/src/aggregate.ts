@@ -27,8 +27,16 @@ function rowsFor(
   }));
 }
 
+/** Was mit unbenannten Kisten passiert, die Items enthalten (generierte Loot-Kisten zählen nie). */
+export type UnnamedRule = "ignore" | "common" | "unassigned";
+
+const UNNAMED_OWNER: Record<Exclude<UnnamedRule, "ignore">, Owner> = {
+  common: { type: "common", key: "allgemein", label: "Allgemein" },
+  unassigned: { type: "unassigned", key: "unbenannt", label: "Unbenannt" },
+};
+
 /** Macht aus Spieler- und Kisten-Snapshots die Zeilen für `stock_items`. */
-export function aggregate(players: PlayerSnapshot[], containers: ContainerSnapshot[]): AggregateResult {
+export function aggregate(players: PlayerSnapshot[], containers: ContainerSnapshot[], unnamed: UnnamedRule = "ignore"): AggregateResult {
   const names = players.map((p) => p.name);
   const rows: StockRow[] = [];
   const unassigned: ContainerSnapshot[] = [];
@@ -41,10 +49,11 @@ export function aggregate(players: PlayerSnapshot[], containers: ContainerSnapsh
   }
 
   for (const c of containers) {
-    const owner = classifyName(c.customName, names);
+    let owner = classifyName(c.customName, names);
+    if (!owner && unnamed !== "ignore" && !c.generated && c.items.length) owner = UNNAMED_OWNER[unnamed];
     if (!owner) continue;
     owners.set(c.id, owner);
-    if (owner.type === "unassigned") unassigned.push(c);
+    if (owner.type === "unassigned" && c.customName) unassigned.push(c);
     rows.push(...rowsFor("container", c.id, owner, c.items));
   }
 
