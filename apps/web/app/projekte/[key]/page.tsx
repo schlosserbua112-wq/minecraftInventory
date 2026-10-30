@@ -10,8 +10,10 @@ import { MaterialImport } from "@/components/MaterialImport";
 import { useData } from "@/lib/data";
 import { fmt, itemName } from "@/lib/items";
 import { projectBalance } from "@/lib/progress";
+import { useItemNames } from "@/lib/itemicons";
 
 export default function ProjectPage() {
+  useItemNames(); // deutsche Namen nachladen
   const { key: raw } = useParams<{ key: string }>();
   const key = decodeURIComponent(raw);
   const { snapshot, actions } = useData();

@@ -6,6 +6,7 @@ import { useData } from "@/lib/data";
 import { totals } from "@/lib/derive";
 import { fmt, itemName } from "@/lib/items";
 import type { HistoryRow } from "@/lib/types";
+import { useItemNames } from "@/lib/itemicons";
 
 function series(rows: HistoryRow[]) {
   const m = new Map<string, number>();
@@ -42,6 +43,7 @@ function Chart({ points }: { points: { t: number; v: number }[] }) {
 }
 
 export default function HistoryPage() {
+  useItemNames(); // deutsche Namen nachladen
   const { snapshot, actions } = useData();
   const items = useMemo(() => (snapshot ? totals(snapshot.stock) : []), [snapshot]);
   const [item, setItem] = useState<string | null>(null);

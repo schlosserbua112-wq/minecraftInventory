@@ -9,6 +9,7 @@ import { useData } from "@/lib/data";
 import { OWNER_COLOR, OWNER_LABEL, SOURCE_LABEL, coords, kindLabel, totals, type Location } from "@/lib/derive";
 import { fmt, itemName, matchesItem } from "@/lib/items";
 import { byOwner, colorOf, placesOf, scopeRows, useOwners, useStoredKeys, type Owner, type Scope } from "@/lib/search";
+import { useItemNames } from "@/lib/itemicons";
 
 const TYPES: (OwnerType | "all")[] = ["all", "common", "project", "player", "unassigned"];
 const TYPE_LABEL: Partial<Record<OwnerType | "all", string>> = { all: "Alles", player: "Spieler" };
@@ -43,6 +44,7 @@ interface Column {
 }
 
 export default function SearchPage() {
+  useItemNames(); // deutsche Namen nachladen
   const { snapshot } = useData();
   const owners = useOwners();
   const [query, setQuery] = useState("");

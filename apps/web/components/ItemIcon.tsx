@@ -5,16 +5,29 @@ import { useItemTexture } from "@/lib/itemicons";
 
 const PIXEL = { imageRendering: "pixelated" } as const;
 
+/** Graue Texturen (Laub, Gras, Lederrüstung) wie im Spiel einfärben. */
+function Tint({ color }: { color?: string }) {
+  if (!color) return null;
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16) / 255);
+  return (
+    <filter id={`tint-${color.slice(1)}`} colorInterpolationFilters="sRGB">
+      <feColorMatrix type="matrix" values={`${r} 0 0 0 0 0 ${g} 0 0 0 0 0 ${b} 0 0 0 0 0 1 0`} />
+    </filter>
+  );
+}
+
 /** Original-Textur des Items, falls hochgeladen; sonst ein kleines Pixel-Symbol in der Farbe des Items. */
 export function ItemIcon({ id, size = 22 }: { id: string; size?: number }) {
   const tex = useItemTexture(id);
   const box = { flex: `0 0 ${size}px` };
+  const filter = tex?.tint ? `url(#tint-${tex.tint.slice(1)})` : undefined;
 
   if (tex && "flat" in tex) {
     // Animierte Texturen sind senkrechte Streifen; "slice" zeigt nur das erste Bild
     return (
       <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden="true" style={box}>
-        <image href={tex.flat} width="16" height="16" preserveAspectRatio="xMidYMin slice" style={PIXEL} />
+        <Tint color={tex.tint} />
+        <image filter={filter} href={tex.flat} width="16" height="16" preserveAspectRatio="xMidYMin slice" style={PIXEL} />
       </svg>
     );
   }
@@ -22,9 +35,12 @@ export function ItemIcon({ id, size = 22 }: { id: string; size?: number }) {
     // Block als Würfel wie im Inventar: Oberseite hell, linke Seite mittel, rechte Seite dunkel
     return (
       <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" style={box}>
-        <image href={tex.top} width="16" height="16" preserveAspectRatio="xMidYMin slice" transform="matrix(0.9375 -0.46875 0.9375 0.46875 1 8.5)" style={PIXEL} />
-        <image href={tex.front} width="16" height="16" preserveAspectRatio="xMidYMin slice" transform="matrix(0.9375 0.46875 0 0.96875 1 8.5)" style={PIXEL} />
-        <image href={tex.side} width="16" height="16" preserveAspectRatio="xMidYMin slice" transform="matrix(0.9375 -0.46875 0 0.96875 16 16)" style={PIXEL} />
+        <Tint color={tex.tint} />
+        <image filter={filter} href={tex.top} width="16" height="16" preserveAspectRatio="xMidYMin slice" transform="matrix(0.9375 -0.46875 0.9375 0.46875 1 8.5)" style={PIXEL} />
+        <g filter={tex.tintTopOnly ? undefined : filter}>
+          <image href={tex.front} width="16" height="16" preserveAspectRatio="xMidYMin slice" transform="matrix(0.9375 0.46875 0 0.96875 1 8.5)" style={PIXEL} />
+          <image href={tex.side} width="16" height="16" preserveAspectRatio="xMidYMin slice" transform="matrix(0.9375 -0.46875 0 0.96875 16 16)" style={PIXEL} />
+        </g>
         <path d="M1 8.5 16 16v15.5L1 24z" fill="#000" fillOpacity="0.22" />
         <path d="M16 16 31 8.5V24l-15 7.5z" fill="#000" fillOpacity="0.42" />
       </svg>

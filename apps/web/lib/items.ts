@@ -1,4 +1,5 @@
 import { itemLabel } from "@mc/core";
+import { germanName } from "./itemicons";
 
 /** Deutsche Namen und Symbolfarben für häufige Items; alles andere fällt auf den englischen Namen zurück. */
 const KNOWN: Record<string, [de: string, color: string, shade: string]> = {
@@ -44,7 +45,7 @@ const KNOWN: Record<string, [de: string, color: string, shade: string]> = {
 };
 
 export function itemName(id: string): string {
-  return KNOWN[id]?.[0] ?? itemLabel(id);
+  return germanName(id) ?? KNOWN[id]?.[0] ?? itemLabel(id);
 }
 
 function hashColor(id: string): [string, string] {

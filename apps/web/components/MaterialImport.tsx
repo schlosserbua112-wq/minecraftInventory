@@ -5,9 +5,11 @@ import { useMemo, useState } from "react";
 import { useData } from "@/lib/data";
 import { fmt, itemName } from "@/lib/items";
 import { ItemIcon } from "./ItemIcon";
+import { useItemNames } from "@/lib/itemicons";
 
 /** Materialliste einfügen oder hochladen, Vorschau prüfen, dann als Projektziele speichern. */
 export function MaterialImport({ projectKey, onDone }: { projectKey: string; onDone: () => void }) {
+  useItemNames(); // deutsche Namen nachladen
   const { actions, snapshot } = useData();
   const [text, setText] = useState("");
   const [mode, setMode] = useState<"replace" | "add">("replace");
