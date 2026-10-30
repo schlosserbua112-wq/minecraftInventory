@@ -87,6 +87,19 @@ export function MapView({
   const box = useRef<HTMLDivElement>(null);
   const world = useWorldMap();
   const [showWorld, setShowWorld] = useState(true);
+  const [showLandmarks, setShowLandmarksState] = useState(true);
+  // Schalter für Landmarks je Browser merken
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("karte.landmarks") === "aus") setShowLandmarksState(false);
+    } catch {}
+  }, []);
+  const setShowLandmarks = (on: boolean) => {
+    setShowLandmarksState(on);
+    try {
+      localStorage.setItem("karte.landmarks", on ? "an" : "aus");
+    } catch {}
+  };
   const [size, setSize] = useState({ w: 0, h: 0 });
   const aspect = size.h ? size.w / size.h : 1.5;
   const initial = useMemo(
@@ -116,6 +129,7 @@ export function MapView({
     const l = target && landmarks.find((x) => x.id === target.id);
     if (!l) return;
     setView((v) => ({ cx: l.x, cz: l.z, w: Math.min(v.w, 600) }));
+    setShowLandmarks(true);
     setCard(landmarkCard(l));
     setTool(null);
     setError("");
@@ -193,6 +207,7 @@ export function MapView({
     }
   };
   const pickTool = (t: "landmark" | "zone") => {
+    if (t === "landmark") setShowLandmarks(true);
     setTool((cur) => (cur === t ? null : t));
     setError("");
   };
@@ -269,7 +284,7 @@ export function MapView({
   const editing = card?.kind === "landmark" ? card : null;
   /** Gespeicherte Landmarks, das gerade bearbeitete in seiner Entwurfsfassung */
   const shownLandmarks = [
-    ...landmarks.filter((l) => l.id !== editing?.id),
+    ...(showLandmarks ? landmarks.filter((l) => l.id !== editing?.id) : []),
     ...(editing ? [{ id: editing.id ?? -1, name: editing.name || "Neues Landmark", color: editing.color, x: num(editing.x), z: num(editing.z), created_by: null }] : []),
   ];
   const draftZone = card?.kind === "zone" && card.id === null ? card : null;
@@ -435,6 +450,21 @@ export function MapView({
             onClick={() => setShowWorld((v) => !v)}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14" /></svg>
+          </button>
+        )}
+        {landmarks.length > 0 && (
+          <button
+            type="button"
+            className="btn"
+            aria-label={showLandmarks ? "Landmarks ausblenden" : "Landmarks einblenden"}
+            title={showLandmarks ? "Landmarks ausblenden" : "Landmarks einblenden"}
+            aria-pressed={showLandmarks}
+            onClick={() => setShowLandmarks(!showLandmarks)}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M12 4l8 8-8 8-8-8z" />
+              {!showLandmarks && <path d="M4 4l16 16" />}
+            </svg>
           </button>
         )}
         <button type="button" className="btn" aria-label="Ansicht zurücksetzen" onClick={() => setView(initial)}>
