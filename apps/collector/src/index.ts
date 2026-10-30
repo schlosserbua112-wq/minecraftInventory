@@ -50,6 +50,9 @@ function liveSource(): Source {
   /** Scans laufen im Hintergrund, die Live-Abfrage wartet nie auf sie. */
   let scanning: Promise<void> | null = null;
   let scanMessage: string | undefined;
+  /** Erste Runde wartet, bis Offline-Spieler und Zonen-Kisten geladen sind, sonst würden sie kurz gelöscht. */
+  let firstZoneScan: Promise<void> | null = null;
+  let zoneScanDone = () => {};
 
   async function scan(sink: Sink, s: Settings, scans: number[], full: boolean) {
     const zones = await sink.loadZones();
@@ -59,6 +62,7 @@ function liveSource(): Source {
     lastZoneScan = Date.now();
     parts.push(`Zonen-Scan: ${found} neue Kisten (${Math.round((Date.now() - t) / 1000)} s)`);
     await sink.finishScanRequests(scans, `${found} neue Kisten gefunden`);
+    zoneScanDone();
     if (full) {
       const t2 = Date.now();
       const outside = await live.fullScan(zones);
@@ -75,6 +79,7 @@ function liveSource(): Source {
         const scans = await sink.takeScanRequests();
         const full = firstRun ? s.sources.fullScan : live.fullScanDue(s);
         if (zoneDue || scans.length || full) {
+          if (firstRun) firstZoneScan = new Promise((resolve) => { zoneScanDone = resolve; });
           firstRun = false;
           scanning = scan(sink, s, scans, full)
             .catch((err) => {
@@ -83,9 +88,15 @@ function liveSource(): Source {
               lastZoneScan = Date.now(); // nicht in jeder Runde neu versuchen
             })
             .finally(() => {
+              zoneScanDone();
               scanning = null;
             });
         }
+      }
+      if (firstZoneScan) {
+        await firstZoneScan;
+        firstZoneScan = null;
+        zoneScanDone = () => {};
       }
       const result = await live.poll(s);
       const message = scanning ? "Scan läuft …" : scanMessage;
