@@ -3,19 +3,21 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Loading } from "@/components/Loading";
 import { useData } from "@/lib/data";
-import { createUser, deleteUser, listProfiles, setAdmin, setPassword, type Profile } from "@/lib/users";
+import { createUser, deleteUser, listProfiles, renameUser, setAdmin, setPassword, type Profile } from "@/lib/users";
 
 const DEMO_USERS: Profile[] = ["Valentin", "Max", "Lena"].map((username, i) => ({
   id: String(i), username, is_admin: i === 0, must_change_password: i === 2, created_at: new Date().toISOString(),
 }));
 
 export default function UsersPage() {
-  const { mode, profile } = useData();
+  const { mode, profile, reloadProfile } = useData();
   const [users, setUsers] = useState<Profile[] | null>(null);
   const [error, setError] = useState("");
   const [form, setForm] = useState({ name: "", password: "", admin: false });
   const [pwFor, setPwFor] = useState<string | null>(null);
   const [newPw, setNewPw] = useState("");
+  const [nameFor, setNameFor] = useState<string | null>(null);
+  const [newName, setNewName] = useState("");
   const [note, setNote] = useState("");
 
   const reload = useCallback(() => {
@@ -87,7 +89,27 @@ export default function UsersPage() {
                     <td>{u.is_admin ? "Admin" : "Mitglied"}</td>
                     <td className="muted">{u.must_change_password ? "muss Passwort ändern" : "aktiv"}</td>
                     <td className="r">
-                      {pwFor === u.id ? (
+                      {nameFor === u.id ? (
+                        <form
+                          className="row"
+                          style={{ justifyContent: "flex-end", gap: 6 }}
+                          onSubmit={async (e) => {
+                            e.preventDefault();
+                            const name = newName.trim();
+                            await run(
+                              () => renameUser(u.id, name),
+                              self ? `Du heißt jetzt ${name}. Melde dich ab jetzt mit diesem Namen an.` : `${u.username} heißt jetzt ${name}. Der Login geht ab jetzt mit dem neuen Namen, das Passwort bleibt.`,
+                            );
+                            if (self) reloadProfile();
+                            setNameFor(null);
+                          }}
+                        >
+                          <label className="sr-only" htmlFor={`name-${u.id}`}>Neuer Name für {u.username}</label>
+                          <input id={`name-${u.id}`} className="input" required pattern="[A-Za-z0-9_]{2,32}" title="2–32 Zeichen: Buchstaben, Ziffern, _" autoComplete="off" value={newName} onChange={(e) => setNewName(e.target.value)} />
+                          <button className="btn" type="submit">Umbenennen</button>
+                          <button className="btn btn-quiet" type="button" onClick={() => setNameFor(null)}>Abbrechen</button>
+                        </form>
+                      ) : pwFor === u.id ? (
                         <form
                           className="row"
                           style={{ justifyContent: "flex-end", gap: 6 }}
@@ -105,7 +127,8 @@ export default function UsersPage() {
                         </form>
                       ) : (
                         <span className="row" style={{ justifyContent: "flex-end", gap: 4 }}>
-                          <button className="btn btn-quiet" type="button" onClick={() => { setPwFor(u.id); setNewPw(""); }}>Passwort setzen</button>
+                          <button className="btn btn-quiet" type="button" onClick={() => { setNameFor(u.id); setNewName(u.username); setPwFor(null); }}>Umbenennen</button>
+                          <button className="btn btn-quiet" type="button" onClick={() => { setPwFor(u.id); setNewPw(""); setNameFor(null); }}>Passwort setzen</button>
                           {!self && (
                             <button className="btn btn-quiet" type="button" onClick={() => run(() => setAdmin(u.id, !u.is_admin), u.is_admin ? `${u.username} ist kein Admin mehr.` : `${u.username} ist jetzt Admin.`)}>
                               {u.is_admin ? "Admin entziehen" : "Zum Admin machen"}

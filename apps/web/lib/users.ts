@@ -38,6 +38,7 @@ async function rpc(fn: string, args: Record<string, unknown>) {
 export const createUser = (username: string, password: string, isAdmin: boolean) =>
   rpc("admin_create_user", { p_username: username, p_password: password, p_is_admin: isAdmin });
 export const setPassword = (id: string, password: string) => rpc("admin_set_password", { p_user: id, p_password: password });
+export const renameUser = (id: string, username: string) => rpc("admin_rename_user", { p_user: id, p_username: username });
 export const setAdmin = (id: string, isAdmin: boolean) => rpc("admin_set_admin", { p_user: id, p_is_admin: isAdmin });
 export const deleteUser = (id: string) => rpc("admin_delete_user", { p_user: id });
 export const changeOwnPassword = (oldPw: string, newPw: string) => rpc("change_own_password", { p_old: oldPw, p_new: newPw });
