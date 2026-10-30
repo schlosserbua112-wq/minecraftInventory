@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { OwnerType, StockRow } from "@mc/core";
 import { ItemIcon } from "@/components/ItemIcon";
+import { ItemTable } from "@/components/ItemTable";
 import { Loading } from "@/components/Loading";
 import { MapView, type MapPin } from "@/components/MapView";
 import { useData } from "@/lib/data";
@@ -10,6 +11,7 @@ import { OWNER_COLOR, OWNER_LABEL, SOURCE_LABEL, coords, kindLabel, totals, type
 import { fmt, itemName, matchesItem } from "@/lib/items";
 import { byOwner, colorOf, placesOf, scopeRows, useOwners, useStoredKeys, type Owner, type Scope } from "@/lib/search";
 import { useItemNames } from "@/lib/itemicons";
+import type { ContainerRow } from "@/lib/types";
 
 const TYPES: (OwnerType | "all")[] = ["all", "player", "unassigned"];
 const TYPE_LABEL: Partial<Record<OwnerType | "all", string>> = { all: "Alles", player: "Spieler" };
@@ -53,6 +55,8 @@ export default function SearchPage() {
   const [keys, setKeys] = useStoredKeys(owners);
   const [item, setItem] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  /** Auf der Karte angeklickte Kiste: zeigt Inhalt und Besitzer statt der Liste. */
+  const [chest, setChest] = useState<string | null>(null);
 
   // Modus im Link merken (?modus=spieler), damit er Neuladen übersteht
   useEffect(() => {
@@ -61,6 +65,7 @@ export default function SearchPage() {
   const switchMode = (m: "all" | "players") => {
     setMode(m);
     setItem(null);
+    setChest(null);
     const url = new URL(location.href);
     if (m === "players") url.searchParams.set("modus", "spieler");
     else url.searchParams.delete("modus");
@@ -116,6 +121,11 @@ export default function SearchPage() {
   const toggle = (k: string) => setKeys(keys.includes(k) ? keys.filter((x) => x !== k) : [...keys, k]);
   const me = owners.find((o) => o.isMe);
   const hiddenPicked = mode === "players" ? picked.filter((o) => o.hidden) : [];
+  const openChest = chest ? snapshot.containers.find((c) => c.id === chest) : undefined;
+  const pickPin = (id: string) => {
+    setSelected(id);
+    setChest(id);
+  };
 
   const columns: Column[] =
     mode === "players"
@@ -157,6 +167,7 @@ export default function SearchPage() {
             onChange={(e) => {
               setQuery(e.target.value);
               setItem(null);
+              setChest(null);
             }}
           />
         </label>
@@ -213,7 +224,16 @@ export default function SearchPage() {
           </p>
         )}
 
-        {item ? (
+        {openChest ? (
+          <ChestDetail
+            chest={openChest}
+            rows={snapshot.stock.filter((r) => r.source_kind === "container" && r.source_id === openChest.id)}
+            owner={openChest.owner_type === "player" ? ownerOf.get(openChest.owner_key ?? "") : undefined}
+            color={pins.find((p) => p.id === openChest.id)?.color ?? OWNER_COLOR[openChest.owner_type ?? "unassigned"]}
+            backLabel={item ? itemName(item) : "Alle Items"}
+            onBack={() => setChest(null)}
+          />
+        ) : item ? (
           <ItemDetail
             item={item}
             places={places}
@@ -288,7 +308,7 @@ export default function SearchPage() {
           pins={pins}
           zones={snapshot.zones}
           selectedId={selected}
-          onSelect={setSelected}
+          onSelect={pickPin}
           focus={`${item ?? "all"}|${mode}|${keyList}`}
           legend={mode === "players" ? picked.map((o) => ({ label: o.isMe ? `${o.label} (ich)` : o.label, color: o.color })) : undefined}
         />
@@ -357,6 +377,54 @@ function ItemDetail({
             </button>
           );
         })}
+      </div>
+    </>
+  );
+}
+
+/** Wem die Kiste gehört, als ganzer Satz. */
+function chestOwnerText(c: ContainerRow, owner?: Owner): string {
+  if (c.owner_type === "player") return owner?.isMe ? "Gehört dir." : `Gehört ${owner?.label ?? c.owner_label}.`;
+  if (c.owner_type === "common") return "Allgemein, gehört allen.";
+  if (c.owner_type === "project") return `Gehört zum Projekt ${c.owner_label}.`;
+  return "Der Name passt zu keinem Spieler und keinem Projekt, deshalb ist sie nicht zugeordnet.";
+}
+
+function ChestDetail({
+  chest,
+  rows,
+  owner,
+  color,
+  backLabel,
+  onBack,
+}: {
+  chest: ContainerRow;
+  rows: StockRow[];
+  owner?: Owner;
+  color: string;
+  backLabel: string;
+  onBack: () => void;
+}) {
+  const total = rows.reduce((n, r) => n + r.count, 0);
+  return (
+    <>
+      <button type="button" className="btn btn-quiet" onClick={onBack} style={{ marginLeft: -12, alignSelf: "flex-start" }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+        {backLabel}
+      </button>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <h2>{chest.custom_name ? `„${chest.custom_name}“` : kindLabel(chest.kind)}</h2>
+        <span className="badge">
+          <span className="dot" style={{ background: color }} />
+          {chestOwnerText(chest, owner)}
+        </span>
+        <span className="muted small">
+          {kindLabel(chest.kind)} bei {coords(chest)}
+        </span>
+      </div>
+      <div className="panel">
+        <div className="panel-head"><h2>Inhalt</h2><span className="faint num">{fmt.format(total)}</span></div>
+        <ItemTable rows={rows} empty="Die Kiste ist leer." />
       </div>
     </>
   );
