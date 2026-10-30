@@ -16,7 +16,7 @@ import type { ContainerRow } from "@/lib/types";
 const TYPES: (OwnerType | "all")[] = ["all", "player", "unassigned"];
 const TYPE_LABEL: Partial<Record<OwnerType | "all", string>> = { all: "Alles", player: "Spieler" };
 /** Spalten der Tabelle bei "Alle Items" ohne Besitzfilter */
-const TYPE_COLS: OwnerType[] = ["common", "player", "project"];
+const TYPE_COLS: OwnerType[] = ["player", "unassigned"];
 /** Mehr Spielerspalten passen nicht neben die Karte; die Summe zählt trotzdem alle Gewählten. */
 const MAX_COLS = 4;
 
