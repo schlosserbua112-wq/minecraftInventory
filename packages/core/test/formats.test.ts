@@ -50,3 +50,23 @@ describe("NBT und Region", () => {
     expect(uuidFromInts([0, 1, 2, -1])).toBe("00000000-0000-0001-0000-0002ffffffff");
   });
 });
+
+describe("echte Dateien von Minecraft 26.3", () => {
+  const dir = new URL("./fixtures/mc-26.3/world/", import.meta.url);
+  it("findet Vales benannte Kisten in r.0.0.mca", async () => {
+    const { readFileSync } = await import("node:fs");
+    const chunks = readRegionChunks(readFileSync(new URL("dimensions/minecraft/overworld/region/r.0.0.mca", dir)));
+    const chests = chunks.flatMap((c) => containersFromChunk(c, "minecraft:overworld")).filter((c) => c.customName === "Vale");
+    expect(chests.map((c) => `${c.x} ${c.y} ${c.z}`).sort()).toEqual(["0 120 16", "0 120 17", "0 121 16", "0 121 17"]);
+    const items = chests.flatMap((c) => c.items.map((i) => i.id)).sort();
+    expect(items).toEqual(["minecraft:anvil", "minecraft:chest"]);
+  });
+  it("liest die Spielerdatei aus players/data", async () => {
+    const { readFileSync, readdirSync } = await import("node:fs");
+    const pd = new URL("players/data/", dir);
+    const file = readdirSync(pd).find((f) => f.endsWith(".dat"))!;
+    const data = readNbt(readFileSync(new URL(file, pd)));
+    expect(data.Dimension).toBe("minecraft:overworld");
+    expect(Array.isArray(data.Inventory) || data.Inventory === undefined).toBe(true);
+  });
+});
