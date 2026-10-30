@@ -60,8 +60,9 @@ export const updateOwnSettings = (inventoryPublic: boolean, aliases: string[]) =
 export const changeOwnPassword = (oldPw: string, newPw: string) => rpc("change_own_password", { p_old: oldPw, p_new: newPw });
 
 /** Eigene private Kiste (Kisten-ID) oder null. Fehlt die Tabelle noch, gibt es einfach keine. */
-export async function loadPrivateContainer(): Promise<string | null> {
-  const { data, error } = await supabase().from("container_private").select("container_id").maybeSingle();
+export async function loadPrivateContainer(userId: string): Promise<string | null> {
+  // Admins sehen alle Markierungen, deshalb nach dem eigenen Konto filtern
+  const { data, error } = await supabase().from("container_private").select("container_id").eq("owner_id", userId).maybeSingle();
   if (error) return null;
   return (data?.container_id as string | undefined) ?? null;
 }

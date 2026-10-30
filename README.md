@@ -19,7 +19,7 @@ Name im Amboss: Spielername → Besitz des Spielers, `Allgemein` → Allgemeingu
 
 Unbenannte Kisten: Schaltet ein Admin sie unter „Benutzer“ ein, erscheinen unbenannte Kisten mit Inhalt aus den Zonen unter „Unbenannte Kisten“. Jeder kann eine anklicken und „Meine“ oder „Allgemeinheit“ wählen (zählt dann wie eine Kiste „Allgemein“); die Zuordnung hängt an der Position und übersteht neue Scans. Ungeöffnete Loot-Kisten tauchen nie auf, schon geöffnete lassen sich nicht von selbst gebauten unterscheiden. Solche Kisten blendet man mit „Keine Spielerkiste, ausblenden“ dauerhaft aus (wieder einblenden unter „Ausgeblendet“).
 
-Private Kiste: Unter „Konto“ macht jeder höchstens eine seiner Kisten privat. Andere Spieler und auch Admins sehen sie und ihren Inhalt dann nirgends mehr (Suche, Karte, Projekte); das prüft die Datenbank per RLS. Gehört die Kiste nicht mehr dem Spieler (umbenannt oder „Nicht meine“), ist sie wieder für alle sichtbar.
+Private Kiste: Unter „Konto“ macht jeder höchstens eine seiner Kisten privat. Andere Spieler sehen sie und ihren Inhalt dann nirgends mehr (Suche, Karte, Projekte), nur Admins; das prüft die Datenbank per RLS. Im Verlauf zählt ihr Inhalt für niemanden mit (der Sammler lässt sie bei den Summen weg). Gehört die Kiste nicht mehr dem Spieler (umbenannt oder „Nicht meine“), ist sie wieder für alle sichtbar.
 
 ## Entnahmen aus fremden Kisten
 
