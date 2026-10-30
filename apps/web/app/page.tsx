@@ -52,6 +52,8 @@ export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<"all" | "players">("all");
   const [type, setType] = useState<OwnerType | "all">("all");
+  /** Liste der als „keine Spielerkiste“ ausgeblendeten Kisten statt der Items */
+  const [showHidden, setShowHidden] = useState(false);
   const [keys, setKeys] = useStoredKeys(owners);
   const [item, setItem] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -68,6 +70,7 @@ export default function SearchPage() {
     setMode(m);
     setItem(null);
     setChest(null);
+    setShowHidden(false);
     const url = new URL(location.href);
     if (m === "players") url.searchParams.set("modus", "spieler");
     else url.searchParams.delete("modus");
@@ -94,7 +97,7 @@ export default function SearchPage() {
   const places = useMemo(() => (snapshot && item ? placesOf(snapshot, rows, item) : []), [snapshot, rows, item]);
 
   const pins: MapPin[] = useMemo(() => {
-    if (!snapshot) return [];
+    if (!snapshot || (showHidden && mode === "all")) return [];
     if (!item) {
       return snapshot.containers
         .filter((c) => c.owner_type && (mode === "players" ? c.owner_type === "player" && keys.includes(c.owner_key ?? "") : type === "all" || c.owner_type === type))
@@ -104,7 +107,7 @@ export default function SearchPage() {
           z: c.z,
           ownerType: c.owner_type!,
           color: mode === "players" ? ownerOf.get(c.owner_key ?? "")?.color : undefined,
-          title: `${c.owner_type === "player" ? `Kiste von ${c.owner_label}` : c.custom_name ?? "Kiste"} · ${coords(c)}`,
+          title: `${c.owner_type === "player" ? `Kiste von ${c.owner_label}` : c.custom_name ?? (c.owner_type === "common" ? "Kiste der Allgemeinheit" : "Unbenannte Kiste")} · ${coords(c)}`,
         }));
     }
     return places
@@ -120,7 +123,7 @@ export default function SearchPage() {
         title: `${ownerText(p)} · ${fmt.format(p.row.count)} · ${coords(p.container!)}`,
       }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapshot, item, places, mode, type, keyList, owners, ownerOf]);
+  }, [snapshot, item, places, mode, type, keyList, owners, ownerOf, showHidden]);
 
   if (!snapshot) return <div className="page"><Loading /></div>;
 
@@ -187,11 +190,17 @@ export default function SearchPage() {
         {mode === "all" ? (
           <div className="chips" role="group" aria-label="Filter nach Besitz">
             {TYPES.map((f) => (
-              <button key={f} type="button" className="chip" aria-pressed={type === f} onClick={() => setType(f)}>
+              <button key={f} type="button" className="chip" aria-pressed={!showHidden && type === f} onClick={() => { setType(f); setShowHidden(false); }}>
                 {f !== "all" && <span className="dot" style={{ background: OWNER_COLOR[f] }} />}
                 {TYPE_LABEL[f] ?? OWNER_LABEL[f as OwnerType]}
               </button>
             ))}
+            {(snapshot.hidden.length > 0 || showHidden) && (
+              <button type="button" className="chip" aria-pressed={showHidden} onClick={() => { setShowHidden(true); setItem(null); setChest(null); }}>
+                <span className="dot" style={{ background: "var(--line-strong)" }} />
+                Ausgeblendet
+              </button>
+            )}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -231,7 +240,9 @@ export default function SearchPage() {
           </p>
         )}
 
-        {openChest ? (
+        {mode === "all" && showHidden ? (
+          <HiddenList ids={snapshot.hidden} />
+        ) : openChest ? (
           <ChestDetail
             chest={openChest}
             rows={snapshot.stock.filter((r) => r.source_kind === "container" && r.source_id === openChest.id)}
@@ -242,6 +253,7 @@ export default function SearchPage() {
             )}
             itemsIn={itemsIn}
             onPick={pickPin}
+            onHidden={() => setChest(null)}
             backLabel={item ? itemName(item) : "Alle Items"}
             onBack={() => setChest(null)}
           />
@@ -337,7 +349,9 @@ export default function SearchPage() {
               ? `${pins.length} Kisten mit ${itemName(item)}`
               : mode === "players"
                 ? `${pins.length} Kisten von ${picked.map((o) => (o.isMe ? "mir" : o.label)).join(", ") || "niemandem"}`
-                : `${pins.length} benannte Kisten`}
+                : showHidden
+                  ? `${snapshot.hidden.length === 1 ? "1 ausgeblendete Kiste" : `${snapshot.hidden.length} ausgeblendete Kisten`}, nicht auf der Karte`
+                  : `${pins.length} Kisten · unbenannte anklicken und zuordnen`}
           </span>
         </div>
         <MapView
@@ -422,8 +436,9 @@ function ItemDetail({
 /** Wem die Kiste gehört, als ganzer Satz. */
 function chestOwnerText(c: ContainerRow, owner?: Owner): string {
   if (c.owner_type === "player") return owner?.isMe ? "Gehört dir." : `Gehört ${owner?.label ?? c.owner_label}.`;
-  if (c.owner_type === "common") return "Allgemein, gehört allen.";
+  if (c.owner_type === "common") return c.custom_name === null ? "Der Allgemeinheit zugeordnet, zählt wie eine Kiste „Allgemein“." : "Allgemein, gehört allen.";
   if (c.owner_type === "project") return `Gehört zum Projekt ${c.owner_label}.`;
+  if (c.custom_name === null) return "Hat keinen Namen und gehört noch niemandem.";
   return "Der Name passt zu keinem Spieler und keinem Projekt, deshalb ist sie nicht zugeordnet.";
 }
 
@@ -435,6 +450,7 @@ function ChestDetail({
   nearby,
   itemsIn,
   onPick,
+  onHidden,
   backLabel,
   onBack,
 }: {
@@ -446,6 +462,8 @@ function ChestDetail({
   nearby: ContainerRow[];
   itemsIn: (id: string) => number;
   onPick: (id: string) => void;
+  /** Die Kiste wurde ausgeblendet und ist damit weg */
+  onHidden: () => void;
   backLabel: string;
   onBack: () => void;
 }) {
@@ -466,6 +484,7 @@ function ChestDetail({
           {kindLabel(chest.kind)} bei {coords(chest)}
         </span>
       </div>
+      {chest.custom_name === null && <ClaimActions key={chest.id} chest={chest} onHidden={onHidden} />}
       {nearby.length > 1 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           <span className="muted small">{nearby.length} Kisten an dieser Stelle</span>
@@ -477,7 +496,7 @@ function ChestDetail({
                   <span className="dot" style={{ background: OWNER_COLOR[c.owner_type ?? "unassigned"] }} />
                   <span className="grow">
                     <span>{c.custom_name ? `„${c.custom_name}“` : kindLabel(c.kind)} · Höhe {c.y}</span>
-                    <span className="sub">{coords(c)}</span>
+                    <span className="sub">{nearbyOwner(c)} · {coords(c)}</span>
                   </span>
                   <span className="qty">{fmt.format(itemsIn(c.id))}</span>
                 </button>
@@ -491,6 +510,102 @@ function ChestDetail({
       </div>
     </>
   );
+}
+
+/** Kurz, für die Liste der Kisten an derselben Stelle. */
+function nearbyOwner(c: ContainerRow): string {
+  if (c.owner_type === "player") return c.owner_label ?? "Spieler";
+  if (c.owner_type === "common") return c.custom_name === null ? "Allgemeinheit" : "Allgemein";
+  if (c.owner_type === "project") return `Projekt ${c.owner_label}`;
+  return c.custom_name === null ? "ohne Besitzer" : "nicht zugeordnet";
+}
+
+function useAct() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function act(fn: () => Promise<void>) {
+    setBusy(true);
+    setError("");
+    try {
+      await fn();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return { busy, error, act };
+}
+
+/**
+ * Unbenannte Kiste zuordnen: „Meine“ oder „Allgemeinheit“, wieder lösen, oder als Loot-Kiste ausblenden.
+ * Die Zuordnung hängt an der Position und übersteht neue Scans.
+ */
+function ClaimActions({ chest, onHidden }: { chest: ContainerRow; onHidden: () => void }) {
+  const { actions, profile } = useData();
+  const { busy, error, act } = useAct();
+  const free = chest.owner_type === "unassigned";
+  const mine = chest.owner_type === "player" && chest.owner_key === profile?.username.toLowerCase();
+  const common = chest.owner_type === "common";
+  const canRelease = !free && (mine || common || profile?.is_admin);
+  if (!free && !canRelease) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <div className="row">
+        {free && (
+          <>
+            <button type="button" className="btn btn-primary" disabled={busy} onClick={() => act(() => actions.claimContainer(chest.id, true))}>Meine</button>
+            <button type="button" className="btn" disabled={busy} onClick={() => act(() => actions.claimCommon(chest.id))}>Allgemeinheit</button>
+            <button
+              type="button"
+              className="btn btn-quiet"
+              disabled={busy}
+              title="Für Kisten, die niemandem gehören, z. B. schon geöffnete Loot-Kisten in Höhlen oder Strukturen"
+              onClick={() => act(async () => { await actions.hideContainer(chest.id, true); onHidden(); })}
+            >
+              Keine Spielerkiste, ausblenden
+            </button>
+          </>
+        )}
+        {canRelease && (
+          <button type="button" className="btn" disabled={busy} onClick={() => act(() => actions.claimContainer(chest.id, false))}>
+            {mine ? "Nicht meine" : common ? "Nicht Allgemeinheit" : `Von ${chest.owner_label} lösen`}
+          </button>
+        )}
+      </div>
+      {error && <p role="alert" style={{ margin: 0, color: "var(--down)" }}>{error}</p>}
+    </div>
+  );
+}
+
+/** Als „keine Spielerkiste“ ausgeblendete Kisten, mit „Wieder einblenden“. */
+function HiddenList({ ids }: { ids: string[] }) {
+  const { actions } = useData();
+  const { busy, error, act } = useAct();
+  return (
+    <div className="list" aria-label="Ausgeblendete Kisten">
+      {ids.length === 0 && <p className="empty">Keine Kiste ausgeblendet.</p>}
+      {error && <p role="alert" style={{ margin: 0, color: "var(--down)" }}>{error}</p>}
+      {ids.map((id) => (
+        <div key={id} className="item-row" style={{ cursor: "default" }}>
+          <span className="dot" style={{ background: "var(--line-strong)" }} />
+          <span className="grow">
+            <span>{coords(posOf(id))}</span>
+            <span className="sub">zählt nicht mit</span>
+          </span>
+          <button type="button" className="btn btn-quiet" disabled={busy} onClick={() => act(() => actions.hideContainer(id, false))}>
+            Wieder einblenden
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Koordinaten aus einer Kisten-ID "<dimension>:<x>:<y>:<z>". */
+function posOf(id: string) {
+  const [x, y, z] = id.split(":").slice(-3).map(Number);
+  return { x: x!, y: y!, z: z! };
 }
 
 function LockIcon() {

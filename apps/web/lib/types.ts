@@ -53,8 +53,6 @@ export interface Snapshot {
   landmarks: LandmarkRow[];
   status: StatusRow | null;
   scans: ScanRow[];
-  /** Admin-Schalter: unbenannte Kisten auf der Website zeigen und per „Meine“ zuordnen lassen. */
-  showUnnamed: boolean;
   /** Als „keine Spielerkiste“ ausgeblendete unbenannte Kisten (Kisten-IDs). */
   hidden: string[];
 }
@@ -82,7 +80,6 @@ export interface Actions {
   claimContainer(id: string, mine: boolean): Promise<void>;
   /** Unbenannte Kiste der Allgemeinheit zuordnen; aufheben geht mit `claimContainer(id, false)`. */
   claimCommon(id: string): Promise<void>;
-  setShowUnnamed(on: boolean): Promise<void>;
   /** Unbenannte Kiste ausblenden (true) oder wieder einblenden (false). */
   hideContainer(id: string, hidden: boolean): Promise<void>;
   /** Entnahmen aus den eigenen Kisten (Admins: aus allen), neueste zuerst. */
