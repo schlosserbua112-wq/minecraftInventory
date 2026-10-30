@@ -8,12 +8,19 @@ import { useData } from "@/lib/data";
 import { OWNER_COLOR, coords, kindLabel } from "@/lib/derive";
 import { fmt } from "@/lib/items";
 
-type Filter = "all" | "free" | "mine";
+type Filter = "all" | "free" | "mine" | "hidden";
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "Alle" },
   { id: "free", label: "Ohne Besitzer" },
   { id: "mine", label: "Meine Kisten" },
+  { id: "hidden", label: "Ausgeblendet" },
 ];
+
+/** Koordinaten aus einer Kisten-ID "<dimension>:<x>:<y>:<z>". */
+function posOf(id: string) {
+  const [x, y, z] = id.split(":").slice(-3).map(Number);
+  return { x: x!, y: y!, z: z! };
+}
 
 /**
  * Unbenannte Kisten in den Zonen. Jeder kann eine anklicken und „Meine“ wählen;
@@ -37,7 +44,7 @@ export default function UnnamedChestsPage() {
       .sort((a, b) => Number(b.mine) - Number(a.mine) || Number(b.free) - Number(a.free) || b.items - a.items);
   }, [snapshot, me]);
 
-  const shown = chests.filter((c) => filter === "all" || (filter === "free" ? c.free : c.mine));
+  const shown = filter === "hidden" ? [] : chests.filter((c) => filter === "all" || (filter === "free" ? c.free : c.mine));
   const pins: MapPin[] = shown.map((c) => ({
     id: c.id,
     x: c.x,
@@ -52,12 +59,11 @@ export default function UnnamedChestsPage() {
   const rows = chest ? snapshot.stock.filter((r) => r.source_kind === "container" && r.source_id === chest.id) : [];
   const canRelease = chest && !chest.free && (chest.mine || profile?.is_admin);
 
-  async function claim(mine: boolean) {
-    if (!chest) return;
+  async function act(fn: () => Promise<void>) {
     setBusy(true);
     setError("");
     try {
-      await actions.claimContainer(chest.id, mine);
+      await fn();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -96,11 +102,22 @@ export default function UnnamedChestsPage() {
             </div>
             <div className="row">
               {chest.free && snapshot.showUnnamed && (
-                <button type="button" className="btn btn-primary" disabled={busy} onClick={() => claim(true)}>Meine</button>
+                <button type="button" className="btn btn-primary" disabled={busy} onClick={() => act(() => actions.claimContainer(chest.id, true))}>Meine</button>
               )}
               {canRelease && (
-                <button type="button" className="btn" disabled={busy} onClick={() => claim(false)}>
+                <button type="button" className="btn" disabled={busy} onClick={() => act(() => actions.claimContainer(chest.id, false))}>
                   {chest.mine ? "Nicht meine" : `Von ${chest.owner_label} lösen`}
+                </button>
+              )}
+              {chest.free && (
+                <button
+                  type="button"
+                  className="btn btn-quiet"
+                  disabled={busy}
+                  title="Für Kisten, die niemandem gehören, z. B. schon geöffnete Loot-Kisten in Höhlen oder Strukturen"
+                  onClick={() => act(async () => { await actions.hideContainer(chest.id, true); setSelected(null); })}
+                >
+                  Keine Spielerkiste, ausblenden
                 </button>
               )}
             </div>
@@ -110,6 +127,23 @@ export default function UnnamedChestsPage() {
               <ItemTable rows={rows} empty="Die Kiste ist leer." />
             </div>
           </>
+        ) : filter === "hidden" ? (
+          <div className="list" aria-label="Ausgeblendete Kisten">
+            {snapshot.hidden.length === 0 && <p className="empty">Keine Kiste ausgeblendet.</p>}
+            {error && <p role="alert" style={{ margin: 0, color: "var(--down)" }}>{error}</p>}
+            {snapshot.hidden.map((id) => (
+              <div key={id} className="item-row" style={{ cursor: "default" }}>
+                <span className="dot" style={{ background: "var(--line-strong)" }} />
+                <span className="grow">
+                  <span>{coords(posOf(id))}</span>
+                  <span className="sub">zählt nicht mit</span>
+                </span>
+                <button type="button" className="btn btn-quiet" disabled={busy} onClick={() => act(() => actions.hideContainer(id, false))}>
+                  Wieder einblenden
+                </button>
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="list" aria-label="Kisten">
             {shown.length === 0 && (

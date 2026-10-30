@@ -19,6 +19,8 @@ export interface Sink {
 export interface UnnamedState {
   show: boolean;
   claims: Map<string, string>;
+  /** Auf der Website als „keine Spielerkiste“ ausgeblendet. */
+  hidden: Set<string>;
 }
 
 export interface HeartbeatExtra {
@@ -165,17 +167,19 @@ export class SupabaseSink implements Sink {
   }
 
   async loadUnnamed() {
-    const [settings, claims] = await Promise.all([
+    const [settings, claims, hidden] = await Promise.all([
       this.db.from("app_settings").select("show_unnamed").eq("id", 1).maybeSingle(),
       this.db.from("container_claims").select("container_id, profiles(username)"),
+      this.db.from("container_hidden").select("container_id"),
     ]);
     // Tabellen fehlen noch (SQL nicht ausgeführt): Funktion bleibt aus, Sammler läuft weiter
-    if (settings.error || claims.error) return { show: false, claims: new Map<string, string>() };
+    if (settings.error || claims.error) return { show: false, claims: new Map<string, string>(), hidden: new Set<string>() };
     const m = new Map<string, string>();
     for (const c of (claims.data ?? []) as unknown as { container_id: string; profiles: { username: string } | null }[]) {
       if (c.profiles) m.set(c.container_id, c.profiles.username);
     }
-    return { show: Boolean(settings.data?.show_unnamed), claims: m };
+    const h = new Set(hidden.error ? [] : (hidden.data ?? []).map((r) => r.container_id as string));
+    return { show: Boolean(settings.data?.show_unnamed), claims: m, hidden: h };
   }
 
   private async check(q: PromiseLike<{ error: unknown }>) {
@@ -204,6 +208,6 @@ export class ConsoleSink implements Sink {
     return new Map<string, string>();
   }
   async loadUnnamed() {
-    return { show: false, claims: new Map<string, string>() };
+    return { show: false, claims: new Map<string, string>(), hidden: new Set<string>() };
   }
 }
