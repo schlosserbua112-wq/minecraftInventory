@@ -104,3 +104,30 @@ describe("unbenannte Kisten", () => {
     expect(r.unassigned).toHaveLength(0);
   });
 });
+
+describe("Weltkarte", () => {
+  it("rendert r.0.0.mca als 512 × 512 PNG mit Gras an Vales Kisten", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { inflateSync } = await import("node:zlib");
+    const { renderRegionMap } = await import("../src/node.js");
+    const buf = readFileSync(new URL("./fixtures/mc-26.3/world/dimensions/minecraft/overworld/region/r.0.0.mca", import.meta.url));
+    const { png, chunks } = renderRegionMap(buf);
+    expect(chunks).toBe(80);
+    expect(png!.subarray(1, 4).toString()).toBe("PNG");
+    expect(png!.readUInt32BE(16)).toBe(512);
+    // IDAT entpacken und ein paar Pixel prüfen: Zeile 0 beginnt mit Filterbyte 0
+    const start = png!.indexOf("IDAT") + 4;
+    const len = png!.readUInt32BE(start - 8);
+    const rows = inflateSync(png!.subarray(start, start + len));
+    const px = (x: number, z: number) => [...rows.subarray(z * 2049 + 1 + x * 4, z * 2049 + 1 + x * 4 + 4)];
+    expect(px(0, 0)[3]).toBe(255); // generiert
+    expect(px(500, 500)[3]).toBe(0); // nicht generiert, durchsichtig
+  });
+
+  it("liest Long-Arrays auf Wunsch verlustfrei", () => {
+    const long = Buffer.alloc(8);
+    long.writeBigInt64BE(-0x0123456789abcdefn);
+    const nbt = Buffer.concat([Buffer.from([10]), str(""), tag(12, "a", Buffer.concat([int(1), long])), Buffer.from([0])]);
+    expect((readNbt(nbt, undefined, true).a as BigInt64Array)[0]).toBe(-0x0123456789abcdefn);
+  });
+});

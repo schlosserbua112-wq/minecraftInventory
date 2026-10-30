@@ -19,6 +19,8 @@ export interface Settings {
     zoneChests: boolean;
     /** Ganze Welt nach neuen Kisten durchsuchen (FTP Region-Dateien). */
     fullScan: boolean;
+    /** Weltkarte der Oberwelt zeichnen und hochladen, täglich zur Vollscan-Uhrzeit (FTP Region-Dateien). */
+    map: boolean;
   };
   /** Spieler und bekannte Kisten abfragen, alle n Sekunden. */
   pollSeconds: number;
@@ -42,7 +44,7 @@ export const LIMITS = {
 export function defaultSettings(pollSeconds = 15): Settings {
   return {
     paused: false,
-    sources: { inventories: true, enderChests: true, offlinePlayers: true, zoneChests: true, fullScan: true },
+    sources: { inventories: true, enderChests: true, offlinePlayers: true, zoneChests: true, fullScan: true, map: true },
     pollSeconds,
     zoneScanMinutes: 30,
     fullScanHour: 4,
@@ -69,6 +71,7 @@ export function normalizeSettings(input: unknown, base: Settings): Settings {
       offlinePlayers: bool(src.offlinePlayers, base.sources.offlinePlayers),
       zoneChests: bool(src.zoneChests, base.sources.zoneChests),
       fullScan: bool(src.fullScan, base.sources.fullScan),
+      map: bool(src.map, base.sources.map),
     },
     pollSeconds: clamp(i.pollSeconds, LIMITS.pollSeconds, base.pollSeconds),
     zoneScanMinutes: clamp(i.zoneScanMinutes, LIMITS.zoneScanMinutes, base.zoneScanMinutes),

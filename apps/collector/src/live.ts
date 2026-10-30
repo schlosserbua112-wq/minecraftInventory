@@ -10,9 +10,10 @@ import {
   type ContainerSnapshot,
   type PlayerSnapshot,
 } from "@mc/core";
-import { eachRegionChunk, readNbt } from "@mc/core/node";
+import { eachRegionChunk, readNbt, renderRegionMap } from "@mc/core/node";
 import type { ServerConfig } from "./config.js";
 import { Rcon } from "./rcon.js";
+import type { MapStore } from "./mapstore.js";
 import type { Settings } from "./settings.js";
 import type { Zone } from "./sink.js";
 import type { WorldFiles } from "./worldfiles.js";
@@ -61,6 +62,8 @@ export class LiveCollector {
   lastZoneScanAt: string | null = null;
   lastFullScanAt: string | null = null;
   private lastFullScanDay = "";
+  lastMapAt: string | null = null;
+  private lastMapDay = "";
 
   constructor(private server: ServerConfig, private files: WorldFiles) {}
 
@@ -208,6 +211,46 @@ export class LiveCollector {
     this.lastFullScanDay = new Date().toISOString().slice(0, 10);
     this.lastFullScanAt = new Date().toISOString();
     return found;
+  }
+
+  /** Karte fällig: täglich zur Vollscan-Stunde (beim Start zusätzlich, wenn es noch keine gibt). */
+  mapDue(s: Settings, now = new Date()): boolean {
+    const day = now.toISOString().slice(0, 10);
+    return s.sources.map && now.getHours() === s.fullScanHour && day !== this.lastMapDay;
+  }
+
+  /**
+   * Zeichnet die Oberwelt Region für Region und lädt geänderte Kacheln hoch.
+   * Es liegt immer nur eine Region-Datei (einige MB) und ein Bild (~1,5 MB) im Speicher.
+   */
+  async renderMap(store: MapStore): Promise<{ regions: number; uploaded: number }> {
+    const index = await store.loadIndex();
+    let regions = 0;
+    let uploaded = 0;
+    try {
+      await this.files.open();
+      const dir = await this.regionDir("minecraft:overworld");
+      if (!dir) return { regions, uploaded };
+      const files = (await this.files.list(dir)).filter((f) => /^r\.-?\d+\.-?\d+\.mca$/.test(f));
+      const seen = new Set<string>();
+      for (const file of files) {
+        const region = file.slice(0, -4);
+        const { png } = renderRegionMap(await this.files.read(`${dir}/${file}`), (i, err) => console.warn(`[karte] ${file} Chunk ${i}: ${String(err)}`));
+        if (!png) continue;
+        seen.add(region);
+        regions++;
+        if (await store.putTile(index, region, png)) uploaded++;
+        // Kurz durchatmen lassen, damit Live-Abfragen auf dem Pi nicht warten
+        await new Promise((r) => setImmediate(r));
+      }
+      for (const r of Object.keys(index.tiles)) if (!seen.has(r)) delete index.tiles[r];
+    } finally {
+      this.files.close();
+    }
+    await store.saveIndex(index);
+    this.lastMapDay = new Date().toISOString().slice(0, 10);
+    this.lastMapAt = new Date().toISOString();
+    return { regions, uploaded };
   }
 
   private async regionDir(dimension: string): Promise<string | null> {

@@ -6,11 +6,13 @@ import { readNbt, type NbtValue } from "./nbt.js";
  * je Chunk 4 Byte Länge, 1 Byte Kompression, dann NBT.
  * Liefert Chunk für Chunk, damit nie die ganze Region im Speicher liegt.
  * `only`: nur diese Felder je Chunk lesen (Standard: nur die Block-Entities).
+ * `bigLongArrays`: Long-Arrays verlustfrei als BigInt64Array (für die Karte).
  */
 export function* eachRegionChunk(
   buf: Buffer,
   onError?: (index: number, err: unknown) => void,
   only: readonly string[] = ["block_entities", "Level", "xPos", "zPos"],
+  bigLongArrays = false,
 ): Generator<Record<string, NbtValue>> {
   if (buf.length < 8192) return;
   for (let index = 0; index < 1024; index++) {
@@ -27,7 +29,7 @@ export function* eachRegionChunk(
       else if (compression === 2) raw = inflateSync(data);
       else if (compression === 3) raw = data;
       else throw new Error(`Kompression ${compression} wird nicht unterstützt`);
-      yield readNbt(raw, only);
+      yield readNbt(raw, only, bigLongArrays);
     } catch (err) {
       onError?.(index, err);
     }

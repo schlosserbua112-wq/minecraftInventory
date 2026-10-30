@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent, type WheelEven
 import type { OwnerType } from "@mc/core";
 import { OWNER_COLOR, OWNER_LABEL } from "@/lib/derive";
 import type { ContainerRow, ZoneRow } from "@/lib/types";
+import { useWorldMap } from "@/lib/worldmap";
 
 export interface MapPin {
   id: string;
@@ -35,8 +36,9 @@ function fit(points: { x: number; z: number; r?: number }[], aspect: number): Vi
 }
 
 /**
- * Schematische Draufsicht (Norden oben, x nach rechts, z nach unten) mit
- * Region-Raster (512 Blöcke), Chunk-Raster beim Hineinzoomen, Zonen und Kisten-Pins.
+ * Draufsicht (Norden oben, x nach rechts, z nach unten): gerenderte Weltkarte des Sammlers
+ * als Hintergrund (falls vorhanden), Region-Raster (512 Blöcke), Chunk-Raster beim
+ * Hineinzoomen, Zonen und Kisten-Pins.
  */
 export function MapView({
   pins,
@@ -53,6 +55,8 @@ export function MapView({
   focus?: string;
 }) {
   const box = useRef<HTMLDivElement>(null);
+  const world = useWorldMap();
+  const [showWorld, setShowWorld] = useState(true);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const aspect = size.h ? size.w / size.h : 1.5;
   const initial = useMemo(
@@ -107,6 +111,7 @@ export function MapView({
     return out.length > 64 ? [] : out;
   }, [x0, z0, view.w, h]);
 
+  const tiles = showWorld ? world.tiles.filter((t) => t.x + 512 > x0 && t.x < x0 + view.w && t.z + 512 > z0 && t.z < z0 + h) : [];
   const showChunks = view.w / 16 < 120;
   const pinSize = 24 * k;
   const usedTypes = [...new Set(pins.map((p) => p.ownerType))];
@@ -129,6 +134,9 @@ export function MapView({
             <path d="M16 0H0V16" fill="none" stroke="#000" strokeOpacity="0.12" strokeWidth={k} />
           </pattern>
         </defs>
+        {tiles.map((t) => (
+          <image key={`${t.x},${t.z}`} href={t.url} x={t.x} y={t.z} width={512} height={512} preserveAspectRatio="none" style={{ imageRendering: "pixelated" }} />
+        ))}
         {showChunks && <rect x={x0} y={z0} width={view.w} height={h} fill="url(#chunks)" />}
         {regionLines.xs.map((x) => (
           <line key={`x${x}`} x1={x} x2={x} y1={z0} y2={z0 + h} stroke="#fff" strokeOpacity="0.35" strokeWidth={k} />
@@ -137,14 +145,14 @@ export function MapView({
           <line key={`z${z}`} y1={z} y2={z} x1={x0} x2={x0 + view.w} stroke="#fff" strokeOpacity="0.35" strokeWidth={k} />
         ))}
         {regionLabels.map((r) => (
-          <text key={r.text} x={r.x + 8 * k} y={r.z + 16 * k} fontSize={11 * k} fill="#fff" fillOpacity="0.8">
+          <text key={r.text} x={r.x + 8 * k} y={r.z + 16 * k} fontSize={11 * k} fill="#fff" fillOpacity="0.8" stroke="#000" strokeOpacity="0.45" strokeWidth={3 * k} paintOrder="stroke">
             {r.text}
           </text>
         ))}
         {zones.map((z) => (
           <g key={z.id}>
             <circle cx={z.center_x} cy={z.center_z} r={z.radius} fill="#fff" fillOpacity="0.05" stroke="#fff" strokeOpacity="0.75" strokeWidth={2 * k} strokeDasharray={`${8 * k} ${6 * k}`} />
-            <text x={z.center_x} y={z.center_z - z.radius - 6 * k} fontSize={12 * k} fill="#fff" textAnchor="middle">
+            <text x={z.center_x} y={z.center_z - z.radius - 6 * k} fontSize={12 * k} fill="#fff" textAnchor="middle" stroke="#000" strokeOpacity="0.5" strokeWidth={3 * k} paintOrder="stroke">
               {z.name}
             </text>
           </g>
@@ -185,6 +193,18 @@ export function MapView({
         <button type="button" className="btn" aria-label="Herauszoomen" onClick={() => zoom(1.4)}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M5 12h14" /></svg>
         </button>
+        {world.tiles.length > 0 && (
+          <button
+            type="button"
+            className="btn"
+            aria-label={showWorld ? "Weltkarte ausblenden" : "Weltkarte einblenden"}
+            aria-pressed={showWorld}
+            title={world.updatedAt ? `Weltkarte vom ${new Date(world.updatedAt).toLocaleString("de-DE")}` : "Weltkarte"}
+            onClick={() => setShowWorld((v) => !v)}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14" /></svg>
+          </button>
+        )}
         <button type="button" className="btn" aria-label="Ansicht zurücksetzen" onClick={() => setView(initial)}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
         </button>
