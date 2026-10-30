@@ -6,6 +6,7 @@ import { Loading } from "@/components/Loading";
 import { useData } from "@/lib/data";
 import { totals } from "@/lib/derive";
 import { fmt, itemName, matchesItem } from "@/lib/items";
+import { useItemNames } from "@/lib/itemicons";
 import type { Dashboard, HistoryRow } from "@/lib/types";
 
 type Point = { t: number; v: number };
@@ -156,6 +157,7 @@ function ItemPicker({ options, taken, onPick, disabled }: { options: string[]; t
 }
 
 export default function HistoryPage() {
+  useItemNames(); // deutsche Namen nachladen
   const { snapshot, actions } = useData();
   const [boards, setBoards] = useState<Dashboard[] | null>(null);
   const [activeId, setActiveId] = useState<number | null>(null);

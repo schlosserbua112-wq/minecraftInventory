@@ -36,7 +36,7 @@ npm run mock        # Mock-Sammler (ohne .env nur Konsole)
 
 ## Original-Item-Icons
 
-Die Texturen gehören Mojang und liegen deshalb nicht im Repo. `node scripts/item-icons.mjs` liest sie aus dem eigenen Minecraft-Client (neueste Jar unter `%APPDATA%\.minecraft\versions`, oder Pfad als Argument) und lädt sie nach einer Admin-Anmeldung als `icons.json` in den privaten Bucket `items` (Migration `20261030000800_item_icons_bucket.sql`). Nur angemeldete Freunde können sie laden. Ohne Datei zeigt die Website die farbigen Ersatzsymbole. Mit `--nur-datei` entsteht nur `item-icons.json`; nach `apps/web/public/` kopiert, nutzt sie auch der Demo-Modus.
+Die Texturen gehören Mojang und liegen deshalb nicht im Repo. `node scripts/item-icons.mjs` liest sie aus dem eigenen Minecraft-Client (neueste Jar unter `%APPDATA%\.minecraft\versions`, oder Pfad als Argument) und lädt sie nach einer Admin-Anmeldung als `icons.json` in den privaten Bucket `items` (Migration `20261030000800_item_icons_bucket.sql`). Nur angemeldete Freunde können sie laden. Das Skript nimmt auch die deutschen Item-Namen aus dem Sprachpaket des Launchers mit (`assets/indexes` und `assets/objects` neben `versions`). Ohne Datei zeigt die Website die farbigen Ersatzsymbole. Mit `--nur-datei` entsteht nur `item-icons.json`; nach `apps/web/public/` kopiert, nutzt sie auch der Demo-Modus.
 
 ## Auf den Pi bringen
 

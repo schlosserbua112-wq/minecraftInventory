@@ -2,9 +2,11 @@ import type { StockRow } from "@mc/core";
 import { totals } from "@/lib/derive";
 import { fmt, itemName } from "@/lib/items";
 import { ItemIcon } from "./ItemIcon";
+import { useItemNames } from "@/lib/itemicons";
 
 /** Summen je Item als Tabelle. */
 export function ItemTable({ rows, empty = "Hier liegt noch nichts.", limit }: { rows: StockRow[]; empty?: string; limit?: number }) {
+  useItemNames(); // deutsche Namen nachladen
   const list = totals(rows);
   if (!list.length) return <p className="empty">{empty}</p>;
   return (
