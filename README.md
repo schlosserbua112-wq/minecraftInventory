@@ -29,9 +29,10 @@ npm run mock        # Mock-Sammler (ohne .env nur Konsole)
 ## Supabase einrichten
 
 1. Projekt anlegen, `supabase/migrations/*.sql` und optional `supabase/seed.sql` ausführen.
-2. Freunde freischalten: `insert into public.friends (email) values ('…');`
-3. Website (Vercel): `NEXT_PUBLIC_SUPABASE_URL` und `NEXT_PUBLIC_SUPABASE_ANON_KEY` setzen. Nur der öffentliche Key.
-4. Pi: `SUPABASE_URL` und `SUPABASE_SERVICE_ROLE_KEY` in `/etc/minecraft-tracker.env` (Rechte 600). Der Schreib-Key bleibt nur auf dem Pi.
+2. Ersten Admin anlegen (SQL-Editor): `select private.bootstrap_admin('Valentin', '<Passwort>');`
+3. Weitere Benutzer legt der Admin auf der Website unter „Benutzer“ an. Login mit Name und Passwort; beim ersten Login wählt jeder ein eigenes Passwort, ändern geht später unter „Konto“.
+4. Website (Vercel): URL und öffentlicher Key stehen in `apps/web/.env.production`.
+5. Pi: `SUPABASE_URL` und `SUPABASE_SERVICE_ROLE_KEY` in `/etc/minecraft-tracker.env` (Rechte 600). Der Schreib-Key bleibt nur auf dem Pi.
 
 ## Auf den Pi bringen
 

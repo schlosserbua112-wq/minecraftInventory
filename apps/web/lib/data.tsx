@@ -5,6 +5,7 @@ import type { Session } from "@supabase/supabase-js";
 import { DemoSource } from "./demo";
 import { loadSnapshot, subscribeChanges, supabase, supabaseActions, supabaseConfigured } from "./supabase";
 import type { Actions, Snapshot } from "./types";
+import { loadProfile, type Profile } from "./users";
 
 interface DataState {
   mode: "demo" | "live";
@@ -13,6 +14,9 @@ interface DataState {
   actions: Actions;
   session: Session | null;
   authReady: boolean;
+  /** undefined = lädt noch, null = angemeldet, aber ohne Profil (kein Zugang) */
+  profile: Profile | null | undefined;
+  reloadProfile: () => void;
 }
 
 const Ctx = createContext<DataState | null>(null);
@@ -26,6 +30,8 @@ export function useData(): DataState {
 export function DataProvider({ children }: { children: ReactNode }) {
   return supabaseConfigured ? <LiveProvider>{children}</LiveProvider> : <DemoProvider>{children}</DemoProvider>;
 }
+
+const DEMO_PROFILE: Profile = { id: "demo", username: "Demo", is_admin: true, must_change_password: false, created_at: new Date(0).toISOString() };
 
 function DemoProvider({ children }: { children: ReactNode }) {
   const source = useMemo(() => new DemoSource(), []);
@@ -42,7 +48,7 @@ function DemoProvider({ children }: { children: ReactNode }) {
   }, [source]);
 
   const value = useMemo<DataState>(
-    () => ({ mode: "demo", snapshot, error: null, actions: source.actions, session: null, authReady: true }),
+    () => ({ mode: "demo", snapshot, error: null, actions: source.actions, session: null, authReady: true, profile: DEMO_PROFILE, reloadProfile: () => {} }),
     [snapshot, source],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -53,6 +59,8 @@ function LiveProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
+  const [profileTick, setProfileTick] = useState(0);
   const pending = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
@@ -78,6 +86,16 @@ function LiveProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!session) {
+      setProfile(undefined);
+      return;
+    }
+    loadProfile(session.user.id)
+      .then(setProfile)
+      .catch((e) => setError(e instanceof Error ? e.message : String(e)));
+  }, [session, profileTick]);
+
+  useEffect(() => {
     if (!session) return;
     refresh();
     const unsub = subscribeChanges(refresh);
@@ -90,8 +108,8 @@ function LiveProvider({ children }: { children: ReactNode }) {
 
   const actions = useMemo(() => supabaseActions(refresh), [refresh]);
   const value = useMemo<DataState>(
-    () => ({ mode: "live", snapshot, error, actions, session, authReady }),
-    [snapshot, error, actions, session, authReady],
+    () => ({ mode: "live", snapshot, error, actions, session, authReady, profile, reloadProfile: () => setProfileTick((t) => t + 1) }),
+    [snapshot, error, actions, session, authReady, profile],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
