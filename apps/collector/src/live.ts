@@ -10,7 +10,7 @@ import {
   type ContainerSnapshot,
   type PlayerSnapshot,
 } from "@mc/core";
-import { readNbt, readRegionChunks } from "@mc/core/node";
+import { eachRegionChunk, readNbt } from "@mc/core/node";
 import type { ServerConfig } from "./config.js";
 import { Rcon } from "./rcon.js";
 import type { Settings } from "./settings.js";
@@ -212,7 +212,7 @@ export class LiveCollector {
     for (const file of regionFiles) {
       if (!existing.has(file)) continue;
       const buf = await this.files.read(`${dir}/${file}`);
-      for (const chunk of readRegionChunks(buf, (i, err) => console.warn(`[scan] ${file} Chunk ${i}: ${String(err)}`))) {
+      for (const chunk of eachRegionChunk(buf, (i, err) => console.warn(`[scan] ${file} Chunk ${i}: ${String(err)}`))) {
         out.push(...containersFromChunk(chunk, dimension));
       }
     }
@@ -243,7 +243,7 @@ export class LiveCollector {
       if (!m) continue;
       const uuid = m[1]!.toLowerCase();
       try {
-        const data = readNbt(await this.files.read(`${dir}/${file}`));
+        const data = readNbt(await this.files.read(`${dir}/${file}`), ["Inventory", "EnderItems", "equipment", "Dimension"]);
         next.set(uuid, { uuid, name: this.names.get(uuid) ?? uuid.slice(0, 8), online: false, inventory: playerInventory(data), enderChest: playerEnderChest(data) });
         void playerDimension(data);
       } catch (err) {

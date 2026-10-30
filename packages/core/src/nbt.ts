@@ -27,6 +27,25 @@ class Reader {
   }
 }
 
+/** Überspringt einen Wert, ohne ihn aufzubauen (spart Speicher bei großen Chunks). */
+function skipPayload(r: Reader, type: number): void {
+  // Länge immer zuerst lesen: `r.pos += r.int()` würde die 4 Längen-Bytes verschlucken
+  const skip = (n: number) => { r.pos += n; };
+  switch (type) {
+    case 1: return skip(1);
+    case 2: return skip(2);
+    case 3: case 5: return skip(4);
+    case 4: case 6: return skip(8);
+    case 7: return skip(r.int());
+    case 8: return skip(r.ushort());
+    case 9: { const inner = r.ubyte(); const n = r.int(); for (let i = 0; i < n; i++) skipPayload(r, inner); return; }
+    case 10: for (;;) { const t = r.ubyte(); if (t === 0) return; skip(r.ushort()); skipPayload(r, t); }
+    case 11: return skip(r.int() * 4);
+    case 12: return skip(r.int() * 8);
+    default: throw new Error(`Unbekannter NBT-Typ ${type} an Position ${r.pos}`);
+  }
+}
+
 function readPayload(r: Reader, type: number, depth: number): NbtValue {
   if (depth > 512) throw new Error("NBT zu tief verschachtelt");
   switch (type) {
@@ -67,11 +86,23 @@ export function decompress(buf: Buffer): Buffer {
   return buf;
 }
 
-/** Liest das Wurzel-Compound einer NBT-Datei (gepackt oder ungepackt). */
-export function readNbt(input: Buffer): Record<string, NbtValue> {
+/**
+ * Liest das Wurzel-Compound einer NBT-Datei (gepackt oder ungepackt).
+ * `only`: nur diese Felder der obersten Ebene aufbauen, alle anderen überspringen.
+ */
+export function readNbt(input: Buffer, only?: readonly string[]): Record<string, NbtValue> {
   const r = new Reader(decompress(input));
   const type = r.ubyte();
   if (type !== 10) throw new Error(`NBT-Wurzel ist kein Compound (Typ ${type})`);
   r.string(); // Name der Wurzel, meist leer
-  return readPayload(r, 10, 0) as Record<string, NbtValue>;
+  if (!only) return readPayload(r, 10, 0) as Record<string, NbtValue>;
+  const keep = new Set(only);
+  const o: Record<string, NbtValue> = {};
+  for (;;) {
+    const t = r.ubyte();
+    if (t === 0) return o;
+    const name = r.string();
+    if (keep.has(name)) o[name] = readPayload(r, t, 1);
+    else skipPayload(r, t);
+  }
 }

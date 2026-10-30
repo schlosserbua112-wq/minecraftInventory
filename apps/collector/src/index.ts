@@ -47,26 +47,48 @@ function liveSource(): Source {
   const live = new LiveCollector(config.server, worldFiles(config.server.world));
   let lastZoneScan = 0;
   let firstRun = true;
+  /** Scans laufen im Hintergrund, die Live-Abfrage wartet nie auf sie. */
+  let scanning: Promise<void> | null = null;
+  let scanMessage: string | undefined;
+
+  async function scan(sink: Sink, s: Settings, scans: number[], full: boolean) {
+    const zones = await sink.loadZones();
+    const parts: string[] = [];
+    const t = Date.now();
+    const found = await live.zoneScan(zones, s);
+    lastZoneScan = Date.now();
+    parts.push(`Zonen-Scan: ${found} neue Kisten (${Math.round((Date.now() - t) / 1000)} s)`);
+    await sink.finishScanRequests(scans, `${found} neue Kisten gefunden`);
+    if (full) {
+      const t2 = Date.now();
+      const outside = await live.fullScan(zones);
+      parts.push(`Vollscan: ${outside} Kisten außerhalb der Zonen (${Math.round((Date.now() - t2) / 1000)} s)`);
+    }
+    scanMessage = parts.join(" · ");
+    console.log(`[live] ${scanMessage}`);
+  }
+
   return {
     async run(s, sink) {
-      const scans = await sink.takeScanRequests();
-      const zoneDue = firstRun || scans.length > 0 || Date.now() - lastZoneScan >= s.zoneScanMinutes * 60_000;
-      let message: string | undefined;
-      if (zoneDue || live.fullScanDue(s)) {
-        const zones = await sink.loadZones();
-        if (zoneDue) {
-          const found = await live.zoneScan(zones, s);
-          lastZoneScan = Date.now();
-          message = `Zonen-Scan: ${found} neue Kisten`;
-          await sink.finishScanRequests(scans, `${found} neue Kisten gefunden`);
+      if (!scanning) {
+        const zoneDue = firstRun || Date.now() - lastZoneScan >= s.zoneScanMinutes * 60_000;
+        const scans = await sink.takeScanRequests();
+        const full = firstRun ? s.sources.fullScan : live.fullScanDue(s);
+        if (zoneDue || scans.length || full) {
+          firstRun = false;
+          scanning = scan(sink, s, scans, full)
+            .catch((err) => {
+              scanMessage = `Scan fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`;
+              console.error(`[live] ${scanMessage}`);
+              lastZoneScan = Date.now(); // nicht in jeder Runde neu versuchen
+            })
+            .finally(() => {
+              scanning = null;
+            });
         }
-        if (firstRun ? s.sources.fullScan : live.fullScanDue(s)) {
-          const found = await live.fullScan(zones);
-          message = [message, `Vollscan: ${found} neue Kisten außerhalb der Zonen`].filter(Boolean).join(" · ");
-        }
-        firstRun = false;
       }
       const result = await live.poll(s);
+      const message = scanning ? "Scan läuft …" : scanMessage;
       return {
         ...result,
         message,
@@ -116,7 +138,6 @@ async function main() {
         const result = aggregate(players, containers);
         await sink.write(players, containers, result, s.historyMinutes);
         await sink.heartbeat(config.mode, message, extra);
-        if (message) console.log(`[${config.mode}] ${message}`);
         Object.assign(health, { lastRunAt: new Date().toISOString(), lastError: null, rows: result.rows.length, unassigned: result.unassigned.length });
       }
     } catch (err) {

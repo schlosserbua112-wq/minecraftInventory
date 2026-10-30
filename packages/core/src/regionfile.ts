@@ -4,10 +4,15 @@ import { readNbt, type NbtValue } from "./nbt.js";
 /**
  * Leser für Region-Dateien (Anvil, r.X.Z.mca): 1024 Chunks, Kopf mit Sektor-Offsets,
  * je Chunk 4 Byte Länge, 1 Byte Kompression, dann NBT.
+ * Liefert Chunk für Chunk, damit nie die ganze Region im Speicher liegt.
+ * `only`: nur diese Felder je Chunk lesen (Standard: nur die Block-Entities).
  */
-export function readRegionChunks(buf: Buffer, onError?: (index: number, err: unknown) => void): Record<string, NbtValue>[] {
-  const chunks: Record<string, NbtValue>[] = [];
-  if (buf.length < 8192) return chunks;
+export function* eachRegionChunk(
+  buf: Buffer,
+  onError?: (index: number, err: unknown) => void,
+  only: readonly string[] = ["block_entities", "Level", "xPos", "zPos"],
+): Generator<Record<string, NbtValue>> {
+  if (buf.length < 8192) return;
   for (let index = 0; index < 1024; index++) {
     const loc = buf.readUInt32BE(index * 4);
     const offset = (loc >>> 8) * 4096;
@@ -22,10 +27,14 @@ export function readRegionChunks(buf: Buffer, onError?: (index: number, err: unk
       else if (compression === 2) raw = inflateSync(data);
       else if (compression === 3) raw = data;
       else throw new Error(`Kompression ${compression} wird nicht unterstützt`);
-      chunks.push(readNbt(raw));
+      yield readNbt(raw, only);
     } catch (err) {
       onError?.(index, err);
     }
   }
-  return chunks;
+}
+
+/** Alle Chunks auf einmal (für Tests und kleine Dateien). */
+export function readRegionChunks(buf: Buffer, onError?: (index: number, err: unknown) => void): Record<string, NbtValue>[] {
+  return [...eachRegionChunk(buf, onError)];
 }
