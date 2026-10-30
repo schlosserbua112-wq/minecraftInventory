@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { StockRow } from "@mc/core";
-import type { Actions, Project, Snapshot } from "./types";
+import type { Actions, Project, Snapshot, TakeRow } from "./types";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -180,5 +180,23 @@ export function supabaseActions(refresh: () => void): Actions {
       refresh();
     },
     setShowUnnamed: (on) => after(db().from("app_settings").update({ show_unnamed: on }).eq("id", 1)),
+    listTakes: async () => {
+      const { data, error } = await db().from("container_takes").select("*").order("taken_at", { ascending: false }).limit(500);
+      if (error?.code === "42P01" || error?.code === "PGRST205") throw new Error("Die Tabelle für Entnahmen fehlt noch. Das SQL dafür muss einmal in Supabase laufen.");
+      if (error) throw new Error(error.message);
+      return (data ?? []) as TakeRow[];
+    },
+    subscribeTakes: (onChange) => {
+      const channel = db().channel("takes").on("postgres_changes", { event: "*", schema: "public", table: "container_takes" }, onChange);
+      channel.subscribe();
+      return () => {
+        db().removeChannel(channel);
+      };
+    },
+    deleteTake: async (id) => {
+      const { data, error } = await db().from("container_takes").delete().eq("id", id).select("id");
+      if (error) throw new Error(error.message);
+      if (!data?.length) throw new Error("Das darfst du nicht. Löschen kann nur der Besitzer der Kiste oder ein Admin.");
+    },
   };
 }

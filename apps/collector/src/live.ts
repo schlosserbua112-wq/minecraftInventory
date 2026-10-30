@@ -8,6 +8,7 @@ import {
   regionsForZone,
   snbtFromDataGet,
   type ContainerSnapshot,
+  type PlayerPos,
   type PlayerSnapshot,
 } from "@mc/core";
 import { eachRegionChunk, readNbt, renderRegionMap } from "@mc/core/node";
@@ -43,6 +44,10 @@ export function parsePlayerList(response: string): { name: string; uuid: string 
 export interface LiveResult {
   players: PlayerSnapshot[];
   containers: ContainerSnapshot[];
+  /** Positionen der Online-Spieler (nur mit Quelle „Entnahmen“). */
+  positions?: PlayerPos[];
+  /** Kisten, die in dieser Abfrage live per RCON gelesen wurden. */
+  liveIds?: Set<string>;
 }
 
 /**
@@ -120,8 +125,13 @@ export class LiveCollector {
     const online = parsePlayerList(await this.rconCommand("list uuids"));
     const onlineIds = new Set(online.map((p) => p.uuid));
 
+    const positions: PlayerPos[] = [];
     for (const p of online) {
       this.names.set(p.uuid, p.name);
+      if (s.sources.takes) {
+        const pos = await this.position(p.uuid, p.name);
+        if (pos) positions.push(pos);
+      }
       if (!s.sources.inventories && !s.sources.enderChests) {
         players.push({ uuid: p.uuid, name: p.name, online: true, inventory: [], enderChest: [] });
         continue;
@@ -154,6 +164,7 @@ export class LiveCollector {
       }
     }
 
+    const liveIds = new Set<string>();
     if (s.sources.zoneChests) {
       for (const c of [...this.zoneContainers.values()]) {
         if (!c.customName && !wantUnnamed(c)) continue;
@@ -171,8 +182,10 @@ export class LiveCollector {
         }
         const raw = { id: KIND_IDS[c.kind], ...(data as object) };
         const fresh = containerFromBlockEntity(raw, c.dimension, c);
-        if (fresh) this.zoneContainers.set(c.id, fresh);
-        else this.zoneContainers.delete(c.id);
+        if (fresh) {
+          this.zoneContainers.set(c.id, fresh);
+          liveIds.add(c.id);
+        } else this.zoneContainers.delete(c.id);
       }
     }
 
@@ -180,7 +193,22 @@ export class LiveCollector {
       ...(s.sources.zoneChests ? [...this.zoneContainers.values()].filter((c) => c.customName || wantUnnamed(c)) : []),
       ...(s.sources.fullScan ? this.outsideContainers.values() : []),
     ];
-    return { players, containers };
+    return { players, containers, positions, liveIds };
+  }
+
+  /** Position und Dimension eines Online-Spielers; null, wenn eine Antwort fehlt. */
+  private async position(uuid: string, name: string): Promise<PlayerPos | null> {
+    try {
+      const { data: pos } = await this.dataGet(`data get entity ${name} Pos`, name);
+      const { data: dim } = await this.dataGet(`data get entity ${name} Dimension`, name);
+      if (!Array.isArray(pos) || pos.length < 3 || typeof dim !== "string") return null;
+      const [x, y, z] = pos.map(Number);
+      if (![x, y, z].every(Number.isFinite)) return null;
+      return { uuid, name, dimension: dim, x: x!, y: y!, z: z! };
+    } catch (err) {
+      console.warn(`[live] ${name} Position: ${err instanceof Error ? err.message : String(err)}`);
+      return null;
+    }
   }
 
   /** Zonen-Scan; liefert die Zahl neu gefundener Kisten. */

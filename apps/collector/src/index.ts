@@ -1,4 +1,4 @@
-import { aggregate, createMockWorld, type ContainerSnapshot, type PlayerSnapshot, type UnnamedRule } from "@mc/core";
+import { aggregate, createMockWorld, detectTakes, type ContainerSnapshot, type PlayerPos, type PlayerSnapshot, type TakeFrame, type UnnamedRule } from "@mc/core";
 import { loadConfig, missingLiveConfig } from "./config.js";
 import { startHealthServer, type HealthState } from "./health.js";
 import { LiveCollector } from "./live.js";
@@ -34,7 +34,15 @@ function unnamedRule(s: Settings, unnamed: UnnamedState): UnnamedRule {
 
 /** Ein Durchlauf liefert Spieler und Kisten, egal ob Testdaten oder echter Server. */
 interface Source {
-  run(s: Settings, sink: Sink, wantUnnamed: (c: ContainerSnapshot) => boolean): Promise<{ players: PlayerSnapshot[]; containers: ContainerSnapshot[]; message?: string; extra?: HeartbeatExtra }>;
+  run(s: Settings, sink: Sink, wantUnnamed: (c: ContainerSnapshot) => boolean): Promise<{
+    players: PlayerSnapshot[];
+    containers: ContainerSnapshot[];
+    message?: string;
+    extra?: HeartbeatExtra;
+    /** Nur live: Spielerpositionen und live gelesene Kisten, für die Entnahmen. */
+    positions?: PlayerPos[];
+    liveIds?: Set<string>;
+  }>;
   close(): void;
 }
 
@@ -160,12 +168,16 @@ async function main() {
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
 
+  /** Stand der letzten Abfrage, mit dem die nächste auf Entnahmen verglichen wird. */
+  let lastFrame: TakeFrame | null = null;
+
   console.log(`Sammler läuft (${config.mode}), alle ${settings.get().pollSeconds} s.`);
   while (!stopping) {
     const started = Date.now();
     const s = settings.get();
     try {
       if (s.paused) {
+        lastFrame = null;
         await sink.heartbeat(config.mode, "pausiert");
       } else {
         const owners = await sink.loadOwners();
@@ -177,6 +189,14 @@ async function main() {
         const containers = run.containers.filter((c) => c.customName || wantUnnamed(c));
         const result = aggregate(players, containers, rule, owners, unnamed.claims);
         await sink.write(players, containers, result, s.historyMinutes);
+        if (s.sources.takes && run.positions && run.liveIds) {
+          const live = run.liveIds;
+          const frame: TakeFrame = { rows: result.rows, containers: containers.filter((c) => live.has(c.id)), positions: run.positions };
+          // Reichweite: an der Kiste plus der Weg, den man zwischen zwei Abfragen sprinten kann
+          const events = lastFrame ? detectTakes(lastFrame, frame, { owners, reachBlocks: 8 + 6 * s.pollSeconds }) : [];
+          if (events.length) await sink.writeTakes(events);
+          lastFrame = frame;
+        } else lastFrame = null;
         await sink.heartbeat(config.mode, message, extra);
         Object.assign(health, { lastRunAt: new Date().toISOString(), lastError: null, rows: result.rows.length, unassigned: result.unassigned.length });
       }

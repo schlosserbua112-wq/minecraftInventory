@@ -1,5 +1,5 @@
 import { aggregate, COMMON_CLAIM, createMockWorld, type MockWorld } from "@mc/core";
-import type { Actions, Project, Snapshot } from "./types";
+import type { Actions, Project, Snapshot, TakeRow } from "./types";
 
 /** Beispieldaten im Browser: dieselbe Mock-Welt wie der Mock-Sammler, nur ohne Supabase. */
 export class DemoSource {
@@ -31,6 +31,12 @@ export class DemoSource {
       owners: [],
     },
   ];
+  private takes: TakeRow[] = [
+    { id: 1, taken_at: new Date(Date.now() - 12 * 60_000).toISOString(), container_id: "minecraft:overworld:14:64:-22", owner_key: "demo", owner_label: "Demo", item_id: "minecraft:diamond", count: 6, suspects: ["Lena"], confidence: "sicher", distance: 2 },
+    { id: 2, taken_at: new Date(Date.now() - 3 * 3600_000).toISOString(), container_id: "minecraft:overworld:14:64:-22", owner_key: "demo", owner_label: "Demo", item_id: "minecraft:iron_ingot", count: 32, suspects: ["Max", "Lena"], confidence: "wahrscheinlich", distance: 19 },
+    { id: 3, taken_at: new Date(Date.now() - 26 * 3600_000).toISOString(), container_id: "minecraft:overworld:-40:70:105", owner_key: "demo", owner_label: "Demo", item_id: "minecraft:golden_apple", count: 1, suspects: ["Max"], confidence: "möglich", distance: 4 },
+  ];
+  private takeListeners = new Set<() => void>();
   private projectListeners = new Set<() => void>();
   private nextId = 100;
   private showUnnamed = true;
@@ -172,6 +178,15 @@ export class DemoSource {
     setShowUnnamed: async (on) => {
       this.showUnnamed = on;
       this.emit();
+    },
+    listTakes: async () => structuredClone(this.takes),
+    subscribeTakes: (fn) => {
+      this.takeListeners.add(fn);
+      return () => this.takeListeners.delete(fn);
+    },
+    deleteTake: async (id) => {
+      this.takes = this.takes.filter((t) => t.id !== id);
+      for (const fn of this.takeListeners) fn();
     },
   };
 }

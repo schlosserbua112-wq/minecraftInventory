@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { COMMON_CLAIM, regionOf, type AggregateResult, type ContainerSnapshot, type PlayerSnapshot, type StockRow } from "@mc/core";
+import { COMMON_CLAIM, regionOf, type AggregateResult, type ContainerSnapshot, type PlayerSnapshot, type StockRow, type TakeConfidence, type TakeEvent } from "@mc/core";
 
 /** Ziel für die gesammelten Daten. */
 export interface Sink {
@@ -14,6 +14,8 @@ export interface Sink {
   loadOwners(): Promise<Map<string, string>>;
   /** Website-Schalter für unbenannte Kisten und „Meine“-Markierungen (Kisten-ID → Kontoname). */
   loadUnnamed(): Promise<UnnamedState>;
+  /** Entnahmen aus fremden Kisten speichern. Fehler werden nur gemeldet, die Runde läuft weiter. */
+  writeTakes(events: TakeEvent[]): Promise<void>;
 }
 
 export interface UnnamedState {
@@ -183,6 +185,41 @@ export class SupabaseSink implements Sink {
     return { show: Boolean(settings.data?.show_unnamed), claims: m, hidden: h };
   }
 
+  /**
+   * Wer in mehreren Abfragen hintereinander aus derselben Kiste dasselbe Item nimmt, landet in einer Zeile.
+   * Schlüssel Kiste|Item|Verdächtiger → Zeile in container_takes.
+   */
+  private recentTakes = new Map<string, { id: number; count: number; confidence: TakeConfidence; at: number }>();
+  private takesWarned = false;
+
+  async writeTakes(events: TakeEvent[]) {
+    const rank: Record<TakeConfidence, number> = { möglich: 0, wahrscheinlich: 1, sicher: 2 };
+    const now = Date.now();
+    for (const [k, v] of this.recentTakes) if (now - v.at > 5 * 60_000) this.recentTakes.delete(k);
+    try {
+      for (const e of events) {
+        const k = `${e.container_id}|${e.item_id}|${e.suspects[0]}`;
+        const prev = this.recentTakes.get(k);
+        const taken_at = new Date(now).toISOString();
+        if (prev) {
+          const confidence = rank[e.confidence] > rank[prev.confidence] ? e.confidence : prev.confidence;
+          await this.check(this.db.from("container_takes").update({ count: prev.count + e.count, confidence, taken_at }).eq("id", prev.id));
+          this.recentTakes.set(k, { id: prev.id, count: prev.count + e.count, confidence, at: now });
+          continue;
+        }
+        const { data, error } = await this.db.from("container_takes").insert({ ...e, taken_at }).select("id").single();
+        if (error) throw error;
+        this.recentTakes.set(k, { id: (data as { id: number }).id, count: e.count, confidence: e.confidence, at: now });
+      }
+      console.log(`[sink] ${events.length} Entnahmen aus fremden Kisten`);
+      this.takesWarned = false;
+    } catch (err) {
+      // Tabelle fehlt noch (SQL nicht ausgeführt): einmal melden, Bestände laufen weiter
+      if (!this.takesWarned) console.warn(`[sink] Entnahmen nicht gespeichert: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
+      this.takesWarned = true;
+    }
+  }
+
   private async check(q: PromiseLike<{ error: unknown }>) {
     const { error } = await q;
     if (error) throw error;
@@ -210,5 +247,8 @@ export class ConsoleSink implements Sink {
   }
   async loadUnnamed() {
     return { show: false, claims: new Map<string, string>(), hidden: new Set<string>() };
+  }
+  async writeTakes(events: TakeEvent[]) {
+    for (const e of events) console.log(`[console] Entnahme: ${e.count}× ${e.item_id} aus ${e.container_id} (${e.owner_label}), ${e.confidence}: ${e.suspects.join(", ")}`);
   }
 }
