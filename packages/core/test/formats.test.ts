@@ -111,6 +111,23 @@ describe("unbenannte Kisten", () => {
     expect(r.rows[0]).toMatchObject({ owner_type: "unassigned", owner_label: "Unbenannt" });
     expect(r.unassigned).toHaveLength(0);
   });
+
+  it("gehören dem Spieler, der sie auf der Website als „Meine“ markiert hat", async () => {
+    const { aggregate } = await import("../src/index.js");
+    const base = { dimension: "minecraft:overworld", y: 64, z: 0, kind: "chest" as const, items: [{ id: "minecraft:stone", count: 5 }] };
+    const chests = [
+      { ...base, id: "a", x: 1, customName: null },
+      { ...base, id: "b", x: 2, customName: "Allgemein" },
+      { ...base, id: "c", x: 3, customName: null },
+    ];
+    const claims = new Map([["a", "Vale"], ["b", "Vale"]]);
+    const r = aggregate([], chests, "unassigned", new Map(), claims);
+    expect(r.owners.get("a")).toEqual({ type: "player", key: "vale", label: "Vale" });
+    // Ein Name im Amboss geht vor
+    expect(r.owners.get("b")?.type).toBe("common");
+    expect(r.owners.get("c")?.key).toBe("unbenannt");
+    expect(aggregate([], chests, "ignore", new Map(), claims).owners.has("a")).toBe(true);
+  });
 });
 
 describe("Weltkarte", () => {

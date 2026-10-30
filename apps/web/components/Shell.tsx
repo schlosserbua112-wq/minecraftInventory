@@ -52,7 +52,12 @@ export function Shell({ children }: { children: ReactNode }) {
         </Gate>
       );
   }
-  const nav = profile?.is_admin ? [...NAV, { href: "/benutzer", label: "Benutzer" }] : NAV;
+  const nav = [
+    ...NAV.slice(0, 2),
+    ...(snapshot?.showUnnamed ? [{ href: "/kisten", label: "Unbenannte Kisten" }] : []),
+    ...NAV.slice(2),
+    ...(profile?.is_admin ? [{ href: "/benutzer", label: "Benutzer" }] : []),
+  ];
 
   const beat = snapshot?.status?.heartbeat_at;
   const offline = mode === "live" && (!beat || now - Date.parse(beat) > 120_000);

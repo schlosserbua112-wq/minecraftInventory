@@ -95,7 +95,7 @@ export default function InventoriesPage() {
         <div className="panel">
           <div className="panel-head">
             <h2>Eigene Kisten</h2>
-            <span className="faint">{chestCount} mit Namen {chestNames.map((n) => `„${n}“`).join(" oder ")}</span>
+            <span className="faint">{chestCount} mit Namen {chestNames.map((n) => `„${n}“`).join(" oder ")}{snapshot.showUnnamed ? " oder als „Meine“ markiert" : ""}</span>
           </div>
           <ItemTable rows={chests} empty={`Noch keine Kiste heißt „${player.name}“. Im Amboss benennen, dann zählt sie hier.`} />
         </div>
