@@ -21,6 +21,8 @@ export interface Snapshot {
   scans: ScanRow[];
   /** Admin-Schalter: unbenannte Kisten auf der Website zeigen und per „Meine“ zuordnen lassen. */
   showUnnamed: boolean;
+  /** Als „keine Spielerkiste“ ausgeblendete unbenannte Kisten (Kisten-IDs). */
+  hidden: string[];
 }
 
 export interface Actions {
@@ -35,5 +37,7 @@ export interface Actions {
   /** Unbenannte Kiste als „Meine“ (true) oder „Nicht meine“ (false) markieren. */
   claimContainer(id: string, mine: boolean): Promise<void>;
   setShowUnnamed(on: boolean): Promise<void>;
+  /** Unbenannte Kiste ausblenden (true) oder wieder einblenden (false). */
+  hideContainer(id: string, hidden: boolean): Promise<void>;
 }
 

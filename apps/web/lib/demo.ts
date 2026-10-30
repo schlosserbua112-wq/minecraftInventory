@@ -4,7 +4,7 @@ import type { Actions, Dashboard, HistoryRow, Snapshot } from "./types";
 /** Beispieldaten im Browser: dieselbe Mock-Welt wie der Mock-Sammler, nur ohne Supabase. */
 export class DemoSource {
   private world: MockWorld = createMockWorld();
-  private base: Omit<Snapshot, "players" | "containers" | "stock" | "status" | "showUnnamed"> = {
+  private base: Omit<Snapshot, "players" | "containers" | "stock" | "status" | "showUnnamed" | "hidden"> = {
     zones: [
       { id: 1, name: "Hauptbasis", dimension: "minecraft:overworld", center_x: 0, center_z: 0, radius: 400, is_main: true },
       { id: 2, name: "Außenposten Mesa", dimension: "minecraft:overworld", center_x: 900, center_z: -650, radius: 120, is_main: false },
@@ -19,6 +19,7 @@ export class DemoSource {
   private showUnnamed = true;
   /** „Meine“-Markierungen im Demo-Modus, Kisten-ID → Kontoname */
   private claims = new Map<string, string>();
+  private hidden = new Set<string>();
   private listeners = new Set<() => void>();
   private timer?: ReturnType<typeof setInterval>;
   private lastTick = new Date().toISOString();
@@ -44,7 +45,8 @@ export class DemoSource {
   }
 
   snapshot(): Snapshot {
-    const { players, containers } = this.world;
+    const { players } = this.world;
+    const containers = this.world.containers.filter((c) => c.customName || !this.hidden.has(c.id));
     const result = aggregate(players, containers, this.showUnnamed ? "unassigned" : "ignore", new Map(), this.claims);
     return {
       ...structuredClone(this.base),
@@ -64,6 +66,7 @@ export class DemoSource {
       stock: result.rows,
       status: { heartbeat_at: this.lastTick, mode: "demo", message: null },
       showUnnamed: this.showUnnamed,
+      hidden: [...this.hidden],
     };
   }
 
@@ -111,6 +114,11 @@ export class DemoSource {
     claimContainer: async (id, mine) => {
       if (mine) this.claims.set(id, "Demo");
       else this.claims.delete(id);
+      this.emit();
+    },
+    hideContainer: async (id, hidden) => {
+      if (hidden) this.hidden.add(id);
+      else this.hidden.delete(id);
       this.emit();
     },
     setShowUnnamed: async (on) => {

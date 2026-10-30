@@ -171,8 +171,10 @@ async function main() {
         const owners = await sink.loadOwners();
         const unnamed = await sink.loadUnnamed();
         const rule = unnamedRule(s, unnamed);
-        const wantUnnamed = (c: ContainerSnapshot) => rule !== "ignore" || unnamed.claims.has(c.id);
-        const { players, containers, message, extra } = await source.run(s, sink, wantUnnamed);
+        const wantUnnamed = (c: ContainerSnapshot) => unnamed.claims.has(c.id) || (rule !== "ignore" && !unnamed.hidden.has(c.id));
+        const run = await source.run(s, sink, wantUnnamed);
+        const { players, message, extra } = run;
+        const containers = run.containers.filter((c) => c.customName || wantUnnamed(c));
         const result = aggregate(players, containers, rule, owners, unnamed.claims);
         await sink.write(players, containers, result, s.historyMinutes);
         await sink.heartbeat(config.mode, message, extra);

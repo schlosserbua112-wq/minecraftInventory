@@ -25,7 +25,7 @@ async function all<T>(table: string, columns = "*"): Promise<T[]> {
 }
 
 export async function loadSnapshot(): Promise<Snapshot> {
-  const [players, containers, stock, zones, status, scans, settings] = await Promise.all([
+  const [players, containers, stock, zones, status, scans, settings, hidden] = await Promise.all([
     all<Snapshot["players"][number]>("players", "uuid, name, online, last_seen"),
     all<Snapshot["containers"][number]>("containers", "id, dimension, x, y, z, kind, custom_name, owner_type, owner_key, owner_label"),
     all<StockRow>("stock_items", "source_kind, source_id, owner_type, owner_key, owner_label, item_id, count"),
@@ -34,17 +34,19 @@ export async function loadSnapshot(): Promise<Snapshot> {
     supabase().from("scan_requests").select("id, requested_at, finished_at, result").order("requested_at", { ascending: false }).limit(5),
     // Fehlt die Tabelle noch (SQL nicht ausgeführt), bleibt der Schalter einfach aus
     supabase().from("app_settings").select("show_unnamed").eq("id", 1).maybeSingle(),
+    supabase().from("container_hidden").select("container_id"),
   ]);
   return {
     players, containers, stock, zones, status: status[0] ?? null, scans: scans.data ?? [],
     showUnnamed: Boolean(settings.data?.show_unnamed),
+    hidden: (hidden.data ?? []).map((r) => r.container_id as string),
   };
 }
 
 /** Ruft `onChange` auf, wenn sich Bestände, Spieler, Status oder Einstellungen ändern. */
 export function subscribeChanges(onChange: () => void): () => void {
   const channel = supabase().channel("tracker");
-  for (const table of ["stock_items", "players", "collector_status", "scan_requests", "app_settings", "container_claims"]) {
+  for (const table of ["stock_items", "players", "collector_status", "scan_requests", "app_settings", "container_claims", "container_hidden"]) {
     channel.on("postgres_changes", { event: "*", schema: "public", table }, onChange);
   }
   channel.subscribe();
@@ -103,6 +105,11 @@ export function supabaseActions(refresh: () => void): Actions {
     },
     claimContainer: async (id, mine) => {
       const { error } = await db().rpc("claim_container", { p_container: id, p_mine: mine });
+      if (error) throw new Error(error.message);
+      refresh();
+    },
+    hideContainer: async (id, hidden) => {
+      const { error } = await db().rpc("hide_container", { p_container: id, p_hidden: hidden });
       if (error) throw new Error(error.message);
       refresh();
     },
