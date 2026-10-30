@@ -129,6 +129,9 @@ export class SupabaseSink implements Sink {
     const slot = minutes * 60_000;
     const stamp = new Date(Math.floor(Date.now() / slot) * slot).toISOString();
     if (stamp === this.lastHistorySlot) return;
+    // Private Kisten zählen im Verlauf nicht mit, solange sie noch dem Spieler gehören
+    const priv = await this.loadPrivate();
+    rows = rows.filter((r) => r.source_kind !== "container" || priv.get(r.source_id) !== r.owner_key);
     const sums = new Map<string, { owner_type: string; owner_key: string; item_id: string; count: number }>();
     for (const r of rows) {
       const k = `${r.owner_type}|${r.owner_key}|${r.item_id}`;
@@ -138,6 +141,17 @@ export class SupabaseSink implements Sink {
     }
     await this.check(this.db.from("stock_history").upsert([...sums.values()].map((s) => ({ ...s, taken_at: stamp }))));
     this.lastHistorySlot = stamp;
+  }
+
+  /** Private Kisten: Kisten-ID → Kontoname klein. Fehlt die Tabelle noch, gibt es keine. */
+  private async loadPrivate() {
+    const { data, error } = await this.db.from("container_private").select("container_id, profiles(username)");
+    const m = new Map<string, string>();
+    if (error) return m;
+    for (const r of (data ?? []) as unknown as { container_id: string; profiles: { username: string } | null }[]) {
+      if (r.profiles) m.set(r.container_id, r.profiles.username.toLowerCase());
+    }
+    return m;
   }
 
   async heartbeat(mode: string, message?: string, extra: HeartbeatExtra = {}) {

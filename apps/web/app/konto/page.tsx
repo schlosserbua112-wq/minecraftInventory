@@ -64,7 +64,7 @@ export default function AccountPage() {
           </div>
         </form>
       </section>
-      <PrivateChest mode={mode} me={profile?.username.toLowerCase() ?? ""} snapshot={snapshot} />
+      <PrivateChest mode={mode} userId={profile?.id ?? ""} me={profile?.username.toLowerCase() ?? ""} snapshot={snapshot} />
       <section className="panel">
         <div className="panel-head">
           <h2>Passwort ändern</h2>
@@ -78,15 +78,15 @@ export default function AccountPage() {
 }
 
 /** Eine eigene Kiste als privat markieren: Sie und ihr Inhalt sind dann für alle anderen unsichtbar. */
-function PrivateChest({ mode, me, snapshot }: { mode: string; me: string; snapshot: ReturnType<typeof useData>["snapshot"] }) {
+function PrivateChest({ mode, userId, me, snapshot }: { mode: string; userId: string; me: string; snapshot: ReturnType<typeof useData>["snapshot"] }) {
   const [current, setCurrent] = useState<string | null>(null);
   const [choice, setChoice] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (mode === "live") loadPrivateContainer().then(setCurrent);
-  }, [mode]);
+    if (mode === "live" && userId) loadPrivateContainer(userId).then(setCurrent);
+  }, [mode, userId]);
 
   const mine = useMemo(() => {
     if (!snapshot) return [];
@@ -123,7 +123,7 @@ function PrivateChest({ mode, me, snapshot }: { mode: string; me: string; snapsh
       </div>
       <div className="panel-body" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <span className="faint" style={{ fontSize: 13 }}>
-          Eine deiner Kisten kannst du privat machen. Andere sehen sie dann nirgends, weder in der Suche noch auf der Karte oder in Projekten. Auch Admins sehen sie nicht.
+          Eine deiner Kisten kannst du privat machen. Andere Spieler sehen sie dann nirgends, weder in der Suche noch auf der Karte oder in Projekten, und ihr Inhalt zählt im Verlauf nicht mit. Nur Admins sehen sie weiterhin.
         </span>
         {privateChest ? (
           <div className="row">
