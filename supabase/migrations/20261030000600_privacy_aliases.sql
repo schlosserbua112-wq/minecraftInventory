@@ -1,8 +1,8 @@
 -- Jeder entscheidet selbst, ob andere sein Inventar und seine Enderkiste sehen.
 -- Aliase: weitere Namen (z. B. der Minecraft-Name), unter denen Kisten und Inventar einem Konto gehören.
 alter table public.profiles
-  add column inventory_public boolean not null default true,
-  add column aliases text[] not null default '{}';
+  add column if not exists inventory_public boolean not null default true,
+  add column if not exists aliases text[] not null default '{}';
 
 -- Darf der aktuelle Benutzer das Inventar dieses Besitzers sehen?
 -- Spieler ohne Konto bleiben sichtbar, weil sie nichts einstellen können.
