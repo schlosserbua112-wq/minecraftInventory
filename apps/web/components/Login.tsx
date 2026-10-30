@@ -43,7 +43,7 @@ export function Login() {
         <span className="wordmark">Ressourcen-Tracker</span>
         {first && <p className="muted" style={{ margin: 0, fontSize: 14 }}>Gib deinen Minecraft-Namen ein und lege dein Passwort fest. Das geht, sobald du einmal auf dem Server warst.</p>}
         <label className="field">
-          {first ? "Minecraft-Name" : "Name"}
+          {first ? "Minecraft-Name" : "Name oder Alias"}
           <input className="input" required autoComplete="username" autoCapitalize="none" spellCheck={false} value={name} onChange={(e) => setName(e.target.value)} />
         </label>
         <label className="field">

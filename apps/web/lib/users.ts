@@ -15,8 +15,15 @@ export interface Profile {
 /** Interne Login-Adresse zu einem Benutzernamen (muss zu private.login_email in der Datenbank passen). */
 export const loginEmail = (username: string) => `${username.trim().toLowerCase()}@users.mc-tracker.local`;
 
+/** Alias (z. B. Minecraft-Name) in den Kontonamen übersetzen; ohne Treffer bleibt der Name, wie er ist. */
+async function resolveLoginName(name: string): Promise<string> {
+  const { data, error } = await supabase().rpc("login_name", { p_name: name });
+  return !error && typeof data === "string" && data ? data : name;
+}
+
 export async function signIn(username: string, password: string) {
-  const { error } = await supabase().auth.signInWithPassword({ email: loginEmail(username), password });
+  const name = await resolveLoginName(username);
+  const { error } = await supabase().auth.signInWithPassword({ email: loginEmail(name), password });
   if (error) throw new Error(error.message === "Invalid login credentials" ? "Name oder Passwort stimmt nicht." : error.message);
 }
 

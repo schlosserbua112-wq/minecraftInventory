@@ -52,7 +52,7 @@ export default function AccountPage() {
             Aliase
             <input className="input" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="z. B. dein Minecraft-Name, Spitzname" autoComplete="off" />
             <span className="faint" style={{ fontSize: 13 }}>
-              Mit Komma trennen. Kisten mit einem dieser Namen gehören dir. Steht hier dein Minecraft-Name, gehört auch dein Inventar zu diesem Konto.
+              Mit Komma trennen. Kisten mit einem dieser Namen gehören dir. Steht hier dein Minecraft-Name, gehört auch dein Inventar zu diesem Konto. Mit jedem Alias kannst du dich auch anmelden.
             </span>
           </label>
           <div className="row">
