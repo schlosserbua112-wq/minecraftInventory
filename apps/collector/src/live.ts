@@ -97,7 +97,18 @@ export class LiveCollector {
         players.push({ uuid: p.uuid, name: p.name, online: true, inventory: [], enderChest: [] });
         continue;
       }
-      const data = snbtFromDataGet(await this.rconCommand(`data get entity ${p.name}`));
+      // Nur die nötigen Teile abfragen; die volle Entity (Rezeptbuch) ist 30–40 KB groß
+      const data: Record<string, unknown> = {};
+      const paths = [...(s.sources.inventories ? ["Inventory", "equipment"] : []), ...(s.sources.enderChests ? ["EnderItems"] : [])];
+      for (const path of paths) {
+        try {
+          const v = snbtFromDataGet(await this.rconCommand(`data get entity ${p.name} ${path}`));
+          if (v != null) data[path] = v;
+        } catch (err) {
+          // Ein kaputter Spieler darf die Runde nicht abbrechen
+          console.warn(`[live] ${p.name} ${path}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
       players.push({
         uuid: p.uuid,
         name: p.name,
@@ -117,7 +128,13 @@ export class LiveCollector {
     if (s.sources.zoneChests) {
       for (const c of [...this.zoneContainers.values()]) {
         const res = await this.rconCommand(`execute in ${c.dimension} run data get block ${c.x} ${c.y} ${c.z}`);
-        const data = snbtFromDataGet(res);
+        let data;
+        try {
+          data = snbtFromDataGet(res);
+        } catch (err) {
+          console.warn(`[live] Kiste ${c.id}: ${err instanceof Error ? err.message : String(err)}`);
+          continue;
+        }
         if (!data) {
           // Kiste abgebaut oder Bereich nicht geladen: nur bei eindeutiger Meldung entfernen
           if (/no block entity|not a block entity/i.test(res)) this.zoneContainers.delete(c.id);
@@ -213,7 +230,8 @@ export class LiveCollector {
       if (!existing.has(file)) continue;
       const buf = await this.files.read(`${dir}/${file}`);
       for (const chunk of eachRegionChunk(buf, (i, err) => console.warn(`[scan] ${file} Chunk ${i}: ${String(err)}`))) {
-        out.push(...containersFromChunk(chunk, dimension));
+        // Unbenannte Kisten zählen laut Namensregeln nicht; weglassen spart Speicher und RCON-Abfragen
+        for (const c of containersFromChunk(chunk, dimension)) if (c.customName) out.push(c);
       }
     }
     return out;

@@ -2,16 +2,22 @@ import { Socket } from "node:net";
 
 const AUTH = 3;
 const EXEC = 2;
+const RESPONSE = 0;
 
 /**
  * Minimaler RCON-Client (Source-RCON-Protokoll, wie Vanilla-Minecraft es spricht).
  * Eine Verbindung, Befehle nacheinander.
+ * Lange Antworten teilt der Server in mehrere Pakete (je 4096 Zeichen) mit derselben ID.
+ * Deshalb folgt jedem Befehl ein leeres Typ-0-Paket; dessen Antwort ("Unknown request 0")
+ * kommt erst nach allen Teilen und markiert das Ende. An G-Portal (26.3, Fabric) geprüft.
  */
 export class Rcon {
   private socket?: Socket;
   private buffer = Buffer.alloc(0);
   private nextId = 1;
   private pending = new Map<number, (body: string) => void>();
+  /** Teilantworten je Befehls-ID */
+  private parts = new Map<number, Buffer[]>();
 
   constructor(private host: string, private port: number, private password: string) {}
 
@@ -38,8 +44,18 @@ export class Rcon {
   async command(cmd: string): Promise<string> {
     if (!this.socket) throw new Error("RCON: nicht verbunden");
     const id = this.nextId++;
-    const result = new Promise<string>((resolve) => this.pending.set(id, resolve));
+    const marker = this.nextId++;
+    this.parts.set(id, []);
+    const result = new Promise<string>((resolve) =>
+      this.pending.set(marker, () => {
+        // Erst am Ende dekodieren, sonst zerbrechen Umlaute an Paketgrenzen
+        const body = Buffer.concat(this.parts.get(id) ?? []).toString("utf8");
+        this.parts.delete(id);
+        resolve(body);
+      }),
+    );
     this.write(id, EXEC, cmd);
+    this.write(marker, RESPONSE, "");
     return result;
   }
 
@@ -64,8 +80,14 @@ export class Rcon {
       const len = this.buffer.readInt32LE(0);
       if (this.buffer.length < 4 + len) return;
       const id = this.buffer.readInt32LE(4);
-      const body = this.buffer.toString("utf8", 12, 4 + len - 2);
+      const raw = Buffer.from(this.buffer.subarray(12, 4 + len - 2));
+      const body = raw.toString("utf8");
       this.buffer = this.buffer.subarray(4 + len);
+      const collecting = this.parts.get(id);
+      if (collecting) {
+        collecting.push(raw);
+        continue;
+      }
       const cb = this.pending.get(id);
       if (cb) {
         this.pending.delete(id);

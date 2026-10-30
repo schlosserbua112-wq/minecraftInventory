@@ -70,3 +70,20 @@ describe("echte Dateien von Minecraft 26.3", () => {
     expect(Array.isArray(data.Inventory) || data.Inventory === undefined).toBe(true);
   });
 });
+
+describe("echte RCON-Antworten von G-Portal (26.3, Fabric)", () => {
+  it("liest volle Spieler-Entities und deren Inventar", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { playerInventory } = await import("../src/index.js");
+    for (const name of ["Tomsen04", "HiaxxxX"]) {
+      const text = readFileSync(new URL(`./fixtures/gportal/rcon/data-get-entity-${name}.txt`, import.meta.url), "utf8").split("\n").slice(1).join("\n");
+      const data = snbtFromDataGet(text);
+      expect(playerInventory(data).length).toBeGreaterThan(0);
+    }
+  });
+  it("liest list uuids", async () => {
+    const { readFileSync } = await import("node:fs");
+    const text = readFileSync(new URL("./fixtures/gportal/rcon/list-uuids.txt", import.meta.url), "utf8");
+    expect(text).toContain("VoisuffVale0810 (be6a62d9-5a99-4429-9e1b-0933842be448)");
+  });
+});
