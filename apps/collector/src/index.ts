@@ -2,6 +2,7 @@ import { aggregate, createMockWorld, type ContainerSnapshot, type PlayerSnapshot
 import { loadConfig, missingLiveConfig } from "./config.js";
 import { startHealthServer, type HealthState } from "./health.js";
 import { LiveCollector } from "./live.js";
+import { LocalMapStore, SupabaseMapStore, type MapStore } from "./mapstore.js";
 import { defaultSettings, SettingsStore, type Settings } from "./settings.js";
 import { ConsoleSink, SupabaseSink, type HeartbeatExtra, type Sink } from "./sink.js";
 import { worldFiles } from "./worldfiles.js";
@@ -45,6 +46,8 @@ function liveSource(): Source {
   const missing = missingLiveConfig(config);
   if (missing.length) throw new Error(`MODE=live, aber in der .env fehlt: ${missing.join(", ")}`);
   const live = new LiveCollector(config.server, worldFiles(config.server.world));
+  const mapStore: MapStore =
+    config.supabaseUrl && config.supabaseKey ? new SupabaseMapStore(config.supabaseUrl, config.supabaseKey) : new LocalMapStore(process.env.MAP_DIR || "map-out");
   let lastZoneScan = 0;
   let firstRun = true;
   /** Scans laufen im Hintergrund, die Live-Abfrage wartet nie auf sie. */
@@ -54,7 +57,7 @@ function liveSource(): Source {
   let firstZoneScan: Promise<void> | null = null;
   let zoneScanDone = () => {};
 
-  async function scan(sink: Sink, s: Settings, scans: number[], full: boolean) {
+  async function scan(sink: Sink, s: Settings, scans: number[], full: boolean, map: boolean | "if-missing") {
     const zones = await sink.loadZones();
     const parts: string[] = [];
     const t = Date.now();
@@ -68,6 +71,16 @@ function liveSource(): Source {
       const outside = await live.fullScan(zones);
       parts.push(`Vollscan: ${outside} Kisten außerhalb der Zonen (${Math.round((Date.now() - t2) / 1000)} s)`);
     }
+    if (map === true || (map === "if-missing" && !(await mapStore.loadIndex()).updated_at)) {
+      const t3 = Date.now();
+      try {
+        const { regions, uploaded } = await live.renderMap(mapStore);
+        parts.push(`Karte: ${regions} Regionen, ${uploaded} neu (${Math.round((Date.now() - t3) / 1000)} s)`);
+      } catch (err) {
+        // Eine kaputte Karte darf den Kisten-Scan nicht als fehlgeschlagen melden
+        parts.push(`Karte fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
     scanMessage = parts.join(" · ");
     console.log(`[live] ${scanMessage}`);
   }
@@ -78,10 +91,11 @@ function liveSource(): Source {
         const zoneDue = firstRun || Date.now() - lastZoneScan >= s.zoneScanMinutes * 60_000;
         const scans = await sink.takeScanRequests();
         const full = firstRun ? s.sources.fullScan : live.fullScanDue(s);
-        if (zoneDue || scans.length || full) {
+        const map = firstRun ? (s.sources.map ? "if-missing" : false) : live.mapDue(s);
+        if (zoneDue || scans.length || full || map) {
           if (firstRun) firstZoneScan = new Promise((resolve) => { zoneScanDone = resolve; });
           firstRun = false;
-          scanning = scan(sink, s, scans, full)
+          scanning = scan(sink, s, scans, full, map)
             .catch((err) => {
               scanMessage = `Scan fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`;
               console.error(`[live] ${scanMessage}`);
