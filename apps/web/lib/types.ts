@@ -11,9 +11,17 @@ export interface LandmarkRow { id: number; name: string; color: string; x: numbe
 export type LandmarkInput = Pick<LandmarkRow, "name" | "color" | "x" | "z">;
 export interface StatusRow { heartbeat_at: string; mode: string | null; message: string | null }
 export interface ScanRow { id: number; requested_at: string; finished_at: string | null; result: string | null }
-/** Eigenes Verlauf-Dashboard: gewählte Items und Zeitraum, je Benutzer gespeichert. */
-export interface Dashboard { id: number; name: string; items: string[]; days: number; position: number }
-export interface HistoryRow { taken_at: string; owner_type: OwnerType; owner_key: string; item_id: string; count: number }
+/** Projekt: benötigte Items und die Kisten, deren Inhalt dazu zählt. Für alle sichtbar. */
+export interface Project {
+  id: number;
+  name: string;
+  created_by: string | null;
+  items: { item_id: string; quantity: number }[];
+  /** Einzelne Kisten (Kisten-IDs) */
+  containers: string[];
+  /** Spieler (Kontoname klein), deren Kisten alle zählen */
+  owners: string[];
+}
 
 export interface Snapshot {
   players: PlayerRow[];
@@ -36,11 +44,17 @@ export interface Actions {
   addLandmark(l: LandmarkInput): Promise<void>;
   updateLandmark(id: number, l: LandmarkInput): Promise<void>;
   removeLandmark(id: number): Promise<void>;
-  loadHistory(itemId: string, days: number): Promise<HistoryRow[]>;
-  listDashboards(): Promise<Dashboard[]>;
-  /** Anlegen (ohne id) oder ändern; liefert das gespeicherte Dashboard. */
-  saveDashboard(d: Omit<Dashboard, "id"> & { id?: number }): Promise<Dashboard>;
-  deleteDashboard(id: number): Promise<void>;
+  listProjects(): Promise<Project[]>;
+  /** Ruft `onChange` auf, wenn jemand ein Projekt ändert. */
+  subscribeProjects(onChange: () => void): () => void;
+  /** Legt ein leeres Projekt an und liefert seine id. */
+  createProject(name: string): Promise<number>;
+  renameProject(id: number, name: string): Promise<void>;
+  deleteProject(id: number): Promise<void>;
+  /** Menge setzen; 0 entfernt das Item aus dem Projekt. */
+  setProjectItem(id: number, itemId: string, quantity: number): Promise<void>;
+  /** Kiste oder Spieler zum Bestand des Projekts zählen (true) oder nicht mehr (false). */
+  setProjectSource(id: number, source: { container: string } | { owner: string }, on: boolean): Promise<void>;
   /** Unbenannte Kiste als „Meine“ (true) oder „Nicht meine“ (false) markieren. */
   claimContainer(id: string, mine: boolean): Promise<void>;
   setShowUnnamed(on: boolean): Promise<void>;

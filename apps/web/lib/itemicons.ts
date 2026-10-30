@@ -91,3 +91,6 @@ export function useItemNames(): number {
   useLoad();
   return useSyncExternalStore(subscribe, () => version, () => 0);
 }
+
+/** Alle Items aus der Icon-Datei (leer, solange sie nicht geladen ist). */
+export const knownItemIds = (): string[] => [...new Set([...(icons?.keys() ?? []), ...names.keys()])];
