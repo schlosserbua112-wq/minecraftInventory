@@ -53,6 +53,7 @@ export interface LiveResult {
  */
 export class LiveCollector {
   private rcon?: Rcon;
+  private rconQueue: Promise<unknown> = Promise.resolve();
   /** Kisten in Zonen, werden live per RCON nachgelesen. */
   private zoneContainers = new Map<string, ContainerSnapshot>();
   /** Kisten außerhalb der Zonen, Stand aus dem letzten Vollscan. */
@@ -68,18 +69,29 @@ export class LiveCollector {
 
   constructor(private server: ServerConfig, private files: WorldFiles) {}
 
-  private async rconCommand(cmd: string): Promise<string> {
+  /**
+   * Befehle laufen nacheinander, auch wenn Zonen-Scan (save-all) und Abfrage gleichzeitig senden.
+   * Sonst bauen beide eine Verbindung auf oder räumen dieselbe zweimal ab.
+   */
+  private rconCommand(cmd: string): Promise<string> {
+    const run = this.rconQueue.then(() => this.rconCommandNow(cmd));
+    this.rconQueue = run.catch(() => {});
+    return run;
+  }
+
+  private async rconCommandNow(cmd: string): Promise<string> {
     if (!this.rcon) {
       const { host, port, password } = this.server.rcon;
       const r = new Rcon(host!, port, password!);
       await r.connect();
       this.rcon = r;
     }
+    const r = this.rcon;
     try {
-      return await withTimeout(this.rcon.command(cmd), 10_000, `RCON-Befehl "${cmd}"`);
+      return await withTimeout(r.command(cmd), 10_000, `RCON-Befehl "${cmd}"`);
     } catch (err) {
-      this.rcon.close();
-      this.rcon = undefined;
+      r.close();
+      if (this.rcon === r) this.rcon = undefined;
       throw err;
     }
   }

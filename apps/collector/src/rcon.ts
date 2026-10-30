@@ -25,11 +25,19 @@ export class Rcon {
     this.socket = new Socket();
     this.socket.setTimeout(timeoutMs);
     this.socket.on("data", (chunk) => this.onData(chunk));
-    await new Promise<void>((resolve, reject) => {
-      this.socket!.once("error", reject);
-      this.socket!.once("timeout", () => reject(new Error("RCON: Zeitüberschreitung")));
-      this.socket!.connect(this.port, this.host, () => resolve());
-    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        this.socket!.once("error", reject);
+        this.socket!.once("timeout", () => reject(new Error("RCON: Zeitüberschreitung")));
+        this.socket!.connect(this.port, this.host, () => resolve());
+      });
+    } catch (err) {
+      this.close();
+      throw err;
+    }
+    // Spätere Fehler nicht als Absturz werfen; offene Befehle laufen dann in ihr eigenes Zeitlimit
+    this.socket.on("error", () => {});
+    this.socket.setTimeout(0);
     const id = this.nextId++;
     const authed = new Promise<boolean>((resolve) => {
       // Bei falschem Passwort antwortet der Server mit ID -1
@@ -37,8 +45,18 @@ export class Rcon {
       this.pending.set(-1, () => resolve(false));
     });
     this.write(id, AUTH, this.password);
-    if (!(await authed)) throw new Error("RCON: Passwort abgelehnt");
+    // Ohne Zeitlimit hängt der Sammler für immer, wenn der Server die Anmeldung nie beantwortet
+    let timer: NodeJS.Timeout | undefined;
+    const ok = await Promise.race([
+      authed,
+      new Promise<"timeout">((resolve) => (timer = setTimeout(() => resolve("timeout"), timeoutMs))),
+    ]).finally(() => clearTimeout(timer));
+    this.pending.delete(id);
     this.pending.delete(-1);
+    if (ok !== true) {
+      this.close();
+      throw new Error(ok === "timeout" ? "RCON: keine Antwort auf die Anmeldung" : "RCON: Passwort abgelehnt");
+    }
   }
 
   async command(cmd: string): Promise<string> {
