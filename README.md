@@ -43,6 +43,8 @@ npm run pi:bundle   # erzeugt dist\pi\minecraft-tracker (Sammler als eine Datei 
 ```
 
 Das legt nur `/opt/apps/minecraft-tracker` an. pi-dashboard, LAN-Party und Autodarts bleiben unverändert; die Kachel entsteht über die `dashboard.*`-Labels.
+
+Die Kachel (Port 8101) öffnet die Einstellungsseite des Sammlers: Datenquellen ein- und ausschalten, Abfrage-, Zonen-, Vollscan- und Verlaufsintervall, Pause. Die Werte liegen im Docker-Volume `settings` und gelten sofort, ohne Neustart. Zugangsdaten stehen dort bewusst nicht, die bleiben in `/etc/minecraft-tracker.env`.
 Entfernen: `cd /opt/apps/minecraft-tracker && docker compose down --rmi all && cd .. && sudo rm -rf minecraft-tracker`.
 
 Hinweis: Auf dem Pi ist die Speicher-Cgroup abgeschaltet (`cgroup_disable=memory`), deshalb greift `mem_limit` nicht. Der Sammler begrenzt seinen Heap selbst und braucht im Leerlauf etwa 63 MB.

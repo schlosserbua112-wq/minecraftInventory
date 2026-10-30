@@ -3,7 +3,7 @@ import { regionOf, type AggregateResult, type ContainerSnapshot, type PlayerSnap
 
 /** Ziel für die gesammelten Daten. */
 export interface Sink {
-  write(players: PlayerSnapshot[], containers: ContainerSnapshot[], result: AggregateResult): Promise<void>;
+  write(players: PlayerSnapshot[], containers: ContainerSnapshot[], result: AggregateResult, historyMinutes?: number): Promise<void>;
   heartbeat(mode: string, message?: string): Promise<void>;
   /** Offene "Jetzt suchen"-Anfragen abholen und als gestartet markieren. */
   takeScanRequests(): Promise<number[]>;
@@ -16,7 +16,7 @@ const key = (r: Pick<StockRow, "source_kind" | "source_id" | "item_id">) => `${r
 export class SupabaseSink implements Sink {
   private db: SupabaseClient;
   private last = new Map<string, StockRow>();
-  private lastHistoryHour = "";
+  private lastHistorySlot = "";
 
   constructor(url: string, serviceKey: string) {
     this.db = createClient(url, serviceKey, { auth: { persistSession: false } });
@@ -29,7 +29,7 @@ export class SupabaseSink implements Sink {
     for (const r of data as StockRow[]) this.last.set(key(r), r);
   }
 
-  async write(players: PlayerSnapshot[], containers: ContainerSnapshot[], result: AggregateResult) {
+  async write(players: PlayerSnapshot[], containers: ContainerSnapshot[], result: AggregateResult, historyMinutes = 60) {
     const now = new Date().toISOString();
 
     await this.check(
@@ -71,16 +71,15 @@ export class SupabaseSink implements Sink {
     }
     this.last = next;
 
-    await this.writeHistory(result.rows);
+    await this.writeHistory(result.rows, historyMinutes);
     console.log(`[sink] ${changed.length} geändert, ${removed.length} entfernt, ${result.unassigned.length} nicht zugeordnet`);
   }
 
-  /** Einmal pro Stunde eine Summe je Besitzer und Item. */
-  private async writeHistory(rows: StockRow[]) {
-    const hour = new Date();
-    hour.setMinutes(0, 0, 0);
-    const stamp = hour.toISOString();
-    if (stamp === this.lastHistoryHour) return;
+  /** Alle `minutes` Minuten eine Summe je Besitzer und Item (auf volle Abschnitte gerundet). */
+  private async writeHistory(rows: StockRow[], minutes: number) {
+    const slot = minutes * 60_000;
+    const stamp = new Date(Math.floor(Date.now() / slot) * slot).toISOString();
+    if (stamp === this.lastHistorySlot) return;
     const sums = new Map<string, { owner_type: string; owner_key: string; item_id: string; count: number }>();
     for (const r of rows) {
       const k = `${r.owner_type}|${r.owner_key}|${r.item_id}`;
@@ -89,7 +88,7 @@ export class SupabaseSink implements Sink {
       sums.set(k, s);
     }
     await this.check(this.db.from("stock_history").upsert([...sums.values()].map((s) => ({ ...s, taken_at: stamp }))));
-    this.lastHistoryHour = stamp;
+    this.lastHistorySlot = stamp;
   }
 
   async heartbeat(mode: string, message?: string) {

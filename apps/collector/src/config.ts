@@ -2,6 +2,8 @@ export interface Config {
   mode: "mock" | "live";
   pollSeconds: number;
   httpPort: number;
+  /** Einstellungen der Pi-Kachel (Docker-Volume). */
+  settingsFile: string;
   siteUrl?: string;
   supabaseUrl?: string;
   supabaseKey?: string;
@@ -15,6 +17,7 @@ export function loadConfig(env = process.env): Config {
     mode,
     pollSeconds,
     httpPort: Number(env.HTTP_PORT ?? 8080),
+    settingsFile: env.SETTINGS_FILE || "/data/settings.json",
     siteUrl: env.SITE_URL || undefined,
     supabaseUrl: env.SUPABASE_URL || undefined,
     supabaseKey: env.SUPABASE_SERVICE_ROLE_KEY || undefined,
