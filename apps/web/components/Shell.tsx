@@ -51,9 +51,7 @@ export function Shell({ children }: { children: ReactNode }) {
       );
   }
   const nav = [
-    ...NAV.slice(0, 2),
-    ...(snapshot?.showUnnamed ? [{ href: "/kisten", label: "Unbenannte Kisten" }] : []),
-    ...NAV.slice(2, 3),
+    ...NAV.slice(0, 3),
     { href: "/entnahmen", label: "Entnahmen" },
     ...NAV.slice(3),
     ...(profile?.is_admin ? [{ href: "/benutzer", label: "Benutzer" }] : []),

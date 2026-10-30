@@ -4,7 +4,7 @@ import type { Actions, Project, Snapshot, TakeRow } from "./types";
 /** Beispieldaten im Browser: dieselbe Mock-Welt wie der Mock-Sammler, nur ohne Supabase. */
 export class DemoSource {
   private world: MockWorld = createMockWorld();
-  private base: Omit<Snapshot, "players" | "containers" | "stock" | "status" | "showUnnamed" | "hidden"> = {
+  private base: Omit<Snapshot, "players" | "containers" | "stock" | "status" | "hidden"> = {
     landmarks: [
       { id: 1, name: "Spawn", color: "#e9c46a", x: 12, z: -40, created_by: "demo" },
       { id: 2, name: "Dorf am See", color: "#7fb3e6", x: -310, z: 220, created_by: "demo" },
@@ -39,7 +39,6 @@ export class DemoSource {
   private takeListeners = new Set<() => void>();
   private projectListeners = new Set<() => void>();
   private nextId = 100;
-  private showUnnamed = true;
   /** „Meine“-Markierungen im Demo-Modus, Kisten-ID → Kontoname */
   private claims = new Map<string, string>();
   private hidden = new Set<string>();
@@ -78,7 +77,7 @@ export class DemoSource {
   snapshot(): Snapshot {
     const { players } = this.world;
     const containers = this.world.containers.filter((c) => c.customName || !this.hidden.has(c.id));
-    const result = aggregate(players, containers, this.showUnnamed ? "unassigned" : "ignore", new Map(), this.claims);
+    const result = aggregate(players, containers, "unassigned", new Map(), this.claims);
     return {
       ...structuredClone(this.base),
       players: players.map((p) => {
@@ -96,7 +95,6 @@ export class DemoSource {
         }),
       stock: result.rows,
       status: { heartbeat_at: this.lastTick, mode: "demo", message: null },
-      showUnnamed: this.showUnnamed,
       hidden: [...this.hidden],
     };
   }
@@ -173,10 +171,6 @@ export class DemoSource {
     hideContainer: async (id, hidden) => {
       if (hidden) this.hidden.add(id);
       else this.hidden.delete(id);
-      this.emit();
-    },
-    setShowUnnamed: async (on) => {
-      this.showUnnamed = on;
       this.emit();
     },
     listTakes: async () => structuredClone(this.takes),

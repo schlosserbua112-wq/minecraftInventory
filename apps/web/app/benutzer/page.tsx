@@ -10,7 +10,7 @@ const DEMO_USERS: Profile[] = ["Valentin", "Max", "Lena"].map((username, i) => (
 }));
 
 export default function UsersPage() {
-  const { mode, profile, reloadProfile, snapshot, actions } = useData();
+  const { mode, profile, reloadProfile } = useData();
   const [users, setUsers] = useState<Profile[] | null>(null);
   const [error, setError] = useState("");
   const [form, setForm] = useState({ name: "", password: "", admin: false });
@@ -71,37 +71,6 @@ export default function UsersPage() {
           </label>
           <button className="btn btn-primary" type="submit">Anlegen</button>
         </form>
-      </section>
-
-      <section className="panel" aria-labelledby="unnamed">
-        <div className="panel-head"><h2 id="unnamed">Unbenannte Kisten</h2><span className="faint">nur Kisten in Zonen, ungeöffnete Loot-Kisten nie</span></div>
-        <div className="panel-body">
-          <label className="row" style={{ cursor: "pointer", alignItems: "flex-start" }}>
-            <input
-              type="checkbox"
-              checked={snapshot?.showUnnamed ?? false}
-              disabled={!snapshot}
-              style={{ marginTop: 4 }}
-              onChange={async (e) => {
-                const on = e.target.checked;
-                setError("");
-                setNote("");
-                try {
-                  await actions.setShowUnnamed(on);
-                  setNote(on ? "Unbenannte Kisten sind jetzt sichtbar. Der Sammler liefert sie ab seiner nächsten Runde." : "Unbenannte Kisten sind ausgeblendet. Als „Meine“ markierte zählen weiter.");
-                } catch (err) {
-                  setError(err instanceof Error ? err.message : String(err));
-                }
-              }}
-            />
-            <span className="grow" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <span>Unbenannte Kisten anzeigen</span>
-              <span className="faint" style={{ fontSize: 13 }}>
-                Dann kann jeder unter „Unbenannte Kisten“ eine Kiste anklicken und „Meine“ wählen. Eine schon einmal geöffnete Loot-Kiste sieht aus wie eine selbst gebaute und taucht deshalb auch auf.
-              </span>
-            </span>
-          </label>
-        </div>
       </section>
 
       <section className="panel" aria-labelledby="all-users">

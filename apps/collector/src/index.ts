@@ -25,7 +25,8 @@ function applySources(players: PlayerSnapshot[], containers: ContainerSnapshot[]
 
 /**
  * Was mit unbenannten Kisten ohne „Meine“-Markierung passiert: Die Pi-Kachel kann sie fest als Allgemein
- * oder „Unbenannt“ zählen; steht sie auf „ignorieren“, entscheidet der Schalter in der Benutzerverwaltung.
+ * oder „Unbenannt“ zählen; steht sie auf „ignorieren“, entscheidet app_settings.show_unnamed
+ * (seit die Zuordnung in der Suche liegt, fest an).
  */
 function unnamedRule(s: Settings, unnamed: UnnamedState): UnnamedRule {
   if (s.unnamedChests !== "ignore") return s.unnamedChests;
