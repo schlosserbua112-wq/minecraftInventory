@@ -1,0 +1,15 @@
+{
+  "name": "minecraft-inventory",
+  "private": true,
+  "workspaces": ["packages/*", "apps/*"],
+  "scripts": {
+    "build": "npm run build -w @mc/core && npm run build -w @mc/collector && npm run build -w @mc/web",
+    "test": "npm test -w @mc/core",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "mock": "npm run build -w @mc/core && npm run mock -w @mc/collector",
+    "dev:web": "npm run build -w @mc/core && npm run dev -w @mc/web"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}
