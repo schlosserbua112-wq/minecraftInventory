@@ -16,6 +16,9 @@ export async function signIn(username: string, password: string) {
   if (error) throw new Error(error.message === "Invalid login credentials" ? "Name oder Passwort stimmt nicht." : error.message);
 }
 
+/** Erster Login: Konto für einen bekannten Minecraft-Namen mit eigenem Passwort anlegen. */
+export const claimAccount = (username: string, password: string) => rpc("claim_account", { p_username: username, p_password: password });
+
 export const signOut = () => supabase().auth.signOut();
 
 export async function loadProfile(id: string): Promise<Profile | null> {
