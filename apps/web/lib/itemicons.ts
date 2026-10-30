@@ -45,8 +45,10 @@ async function load(live: boolean) {
   try {
     let text: string | null = null;
     if (live) {
-      const { data } = await supabase().storage.from("items").download("icons.json");
-      text = data ? await data.text() : null;
+      // Nicht aus dem Browser-Cache: nach einem neuen Upload sollen Icons und Namen sofort stimmen
+      const { data } = await supabase().storage.from("items").createSignedUrl("icons.json", 600);
+      const res = data ? await fetch(data.signedUrl, { cache: "no-cache" }) : null;
+      text = res?.ok ? await res.text() : null;
     } else {
       const res = await fetch("/item-icons.json");
       text = res.ok ? await res.text() : null;

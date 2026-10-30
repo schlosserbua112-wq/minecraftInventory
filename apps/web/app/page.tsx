@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type { OwnerType, StockRow } from "@mc/core";
 import { ItemIcon } from "@/components/ItemIcon";
 import { ItemTable } from "@/components/ItemTable";
@@ -17,8 +17,8 @@ const TYPES: (OwnerType | "all")[] = ["all", "player", "unassigned"];
 const TYPE_LABEL: Partial<Record<OwnerType | "all", string>> = { all: "Alles", player: "Spieler" };
 /** Spalten der Tabelle bei "Alle Items" ohne Besitzfilter */
 const TYPE_COLS: OwnerType[] = ["common", "player", "project"];
-/** Mehr Spielerspalten passen nicht neben die Karte; die Summe zählt trotzdem alle Gewählten. */
-const MAX_COLS = 4;
+/** Breite der Seitenleiste: Item-Spalte plus je Zahlenspalte (inkl. Summe); die Karte wird entsprechend schmaler. */
+const sideWidth = (cols: number) => 248 + 72 * (cols + 1);
 
 /** Wem gehört dieser Fundort, in einem Satzteil. */
 function ownerText(l: Location): string {
@@ -129,7 +129,7 @@ export default function SearchPage() {
 
   const columns: Column[] =
     mode === "players"
-      ? picked.slice(0, MAX_COLS).map((o) => ({ key: o.key, label: ownerName(o), color: o.color, count: (r) => r.reduce((n, x) => (x.owner_key === o.key ? n + x.count : n), 0) }))
+      ? picked.map((o) => ({ key: o.key, label: ownerName(o), color: o.color, count: (r) => r.reduce((n, x) => (x.owner_key === o.key ? n + x.count : n), 0) }))
       : type === "all"
         ? TYPE_COLS.map((t) => ({ key: t, label: OWNER_LABEL[t], color: OWNER_COLOR[t], count: (r) => r.reduce((n, x) => (x.owner_type === t ? n + x.count : n), 0) }))
         : [];
@@ -156,7 +156,7 @@ export default function SearchPage() {
 
   return (
     <main className="split">
-      <section className="side side-wide" aria-label="Suche">
+      <section className="side side-wide" aria-label="Suche" style={{ "--side-w": `${Math.max(sideWidth(columns.length), 520)}px` } as CSSProperties}>
         <label className="search">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{ color: "var(--muted)" }}><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
           <span className="sr-only">Item suchen</span>
@@ -283,9 +283,6 @@ export default function SearchPage() {
                 })}
               </tbody>
             </table>
-            {mode === "players" && picked.length > MAX_COLS && (
-              <p className="note" style={{ marginTop: 10 }}>Spalten für die ersten {MAX_COLS} Spieler, die Summe zählt alle {picked.length}.</p>
-            )}
           </div>
         )}
       </section>
