@@ -55,6 +55,7 @@ export function Shell({ children }: { children: ReactNode }) {
     ...(snapshot?.showUnnamed ? [{ href: "/kisten", label: "Unbenannte Kisten" }] : []),
     ...NAV.slice(2, 3),
     { href: "/entnahmen", label: "Entnahmen" },
+    { href: "/statistiken", label: "Statistiken" },
     ...NAV.slice(3),
     ...(profile?.is_admin ? [{ href: "/benutzer", label: "Benutzer" }] : []),
   ];

@@ -86,6 +86,15 @@ function liveSource(): Source {
     parts.push(`Zonen-Scan: ${found} neue Kisten (${Math.round((Date.now() - t) / 1000)} s)`);
     await sink.finishScanRequests(scanIds, `${found} neue Kisten gefunden`);
     zoneScanDone();
+    if (s.sources.stats) {
+      try {
+        const stats = await live.readStats();
+        await sink.writeStats(stats);
+        parts.push(`Statistiken: ${stats.length} Spieler`);
+      } catch (err) {
+        parts.push(`Statistiken fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
     if (full) {
       const t2 = Date.now();
       const outside = await live.fullScan(zones);

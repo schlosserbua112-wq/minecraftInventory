@@ -1,4 +1,4 @@
-import type { OwnerType, StockRow } from "@mc/core";
+import type { OwnerType, PlayerStats, StockRow } from "@mc/core";
 
 export interface PlayerRow { uuid: string; name: string; online: boolean; last_seen: string | null }
 export interface ContainerRow {
@@ -35,6 +35,14 @@ export interface TakeRow {
   suspects: string[];
   confidence: "sicher" | "wahrscheinlich" | "möglich";
   distance: number | null;
+}
+
+/** Zusammenfassung der Stats-Datei eines Spielers, vom Sammler bei jedem Zonen-Scan aktualisiert. */
+export interface PlayerStatsRow {
+  uuid: string;
+  name: string;
+  stats: PlayerStats;
+  updated_at: string;
 }
 
 export interface Snapshot {
@@ -82,5 +90,8 @@ export interface Actions {
   subscribeTakes(onChange: () => void): () => void;
   /** Eintrag als erledigt entfernen. */
   deleteTake(id: number): Promise<void>;
+  /** Statistiken aller Spieler. */
+  listStats(): Promise<PlayerStatsRow[]>;
+  subscribeStats(onChange: () => void): () => void;
 }
 

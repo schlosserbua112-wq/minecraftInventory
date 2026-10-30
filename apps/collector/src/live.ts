@@ -7,9 +7,11 @@ import {
   regionOf,
   regionsForZone,
   snbtFromDataGet,
+  summarizeStats,
   type ContainerSnapshot,
   type PlayerPos,
   type PlayerSnapshot,
+  type PlayerStats,
 } from "@mc/core";
 import { eachRegionChunk, readNbt, renderRegionMap } from "@mc/core/node";
 import type { ServerConfig } from "./config.js";
@@ -39,6 +41,12 @@ export function parsePlayerList(response: string): { name: string; uuid: string 
   const at = response.lastIndexOf("players online:");
   for (const m of response.slice(Math.max(at, 0)).matchAll(/([A-Za-z0-9_]{1,16}) \(([0-9a-fA-F-]{36})\)/g)) out.push({ name: m[1]!, uuid: m[2]!.toLowerCase() });
   return out;
+}
+
+export interface PlayerStatsRow {
+  uuid: string;
+  name: string;
+  stats: PlayerStats;
 }
 
 export interface LiveResult {
@@ -346,6 +354,39 @@ export class LiveCollector {
           if (c.customName || (keepUnnamed && !c.generated && c.items.length)) out.push(c);
         }
       }
+    }
+    return out;
+  }
+
+  /**
+   * Statistiken aller Spieler, die je auf dem Server waren. Minecraft schreibt die Dateien beim Autosave
+   * und beim Ausloggen, deshalb reicht es, sie mit dem Zonen-Scan zu lesen.
+   */
+  async readStats(): Promise<PlayerStatsRow[]> {
+    const out: PlayerStatsRow[] = [];
+    try {
+      await this.files.open();
+      await this.loadNames();
+      // 26.3: <welt>/players/stats/<uuid>.json, ältere Versionen: <welt>/stats/<uuid>.json
+      let dir = `${this.server.level}/players/stats`;
+      let files = await this.files.list(dir);
+      if (!files.some((f) => f.endsWith(".json"))) {
+        dir = `${this.server.level}/stats`;
+        files = await this.files.list(dir);
+      }
+      for (const file of files) {
+        const m = /^([0-9a-f-]{36})\.json$/i.exec(file);
+        if (!m) continue;
+        const uuid = m[1]!.toLowerCase();
+        try {
+          const stats = summarizeStats(JSON.parse((await this.files.read(`${dir}/${file}`)).toString("utf8")));
+          if (stats) out.push({ uuid, name: this.names.get(uuid) ?? uuid.slice(0, 8), stats });
+        } catch (err) {
+          console.warn(`[stats] ${file}: ${String(err)}`);
+        }
+      }
+    } finally {
+      this.files.close();
     }
     return out;
   }
