@@ -169,6 +169,11 @@ export function supabaseActions(refresh: () => void): Actions {
       if (error) throw new Error(error.message);
       refresh();
     },
+    claimCommon: async (id) => {
+      const { error } = await db().rpc("claim_container_common", { p_container: id });
+      if (error) throw new Error(error.message);
+      refresh();
+    },
     hideContainer: async (id, hidden) => {
       const { error } = await db().rpc("hide_container", { p_container: id, p_hidden: hidden });
       if (error) throw new Error(error.message);

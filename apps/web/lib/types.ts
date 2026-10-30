@@ -57,6 +57,8 @@ export interface Actions {
   setProjectSource(id: number, source: { container: string } | { owner: string }, on: boolean): Promise<void>;
   /** Unbenannte Kiste als „Meine“ (true) oder „Nicht meine“ (false) markieren. */
   claimContainer(id: string, mine: boolean): Promise<void>;
+  /** Unbenannte Kiste der Allgemeinheit zuordnen; aufheben geht mit `claimContainer(id, false)`. */
+  claimCommon(id: string): Promise<void>;
   setShowUnnamed(on: boolean): Promise<void>;
   /** Unbenannte Kiste ausblenden (true) oder wieder einblenden (false). */
   hideContainer(id: string, hidden: boolean): Promise<void>;

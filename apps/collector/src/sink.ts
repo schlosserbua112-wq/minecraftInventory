@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { regionOf, type AggregateResult, type ContainerSnapshot, type PlayerSnapshot, type StockRow } from "@mc/core";
+import { COMMON_CLAIM, regionOf, type AggregateResult, type ContainerSnapshot, type PlayerSnapshot, type StockRow } from "@mc/core";
 
 /** Ziel für die gesammelten Daten. */
 export interface Sink {
@@ -169,14 +169,15 @@ export class SupabaseSink implements Sink {
   async loadUnnamed() {
     const [settings, claims, hidden] = await Promise.all([
       this.db.from("app_settings").select("show_unnamed").eq("id", 1).maybeSingle(),
-      this.db.from("container_claims").select("container_id, profiles(username)"),
+      this.db.from("container_claims").select("*, profiles(username)"),
       this.db.from("container_hidden").select("container_id"),
     ]);
     // Tabellen fehlen noch (SQL nicht ausgeführt): Funktion bleibt aus, Sammler läuft weiter
     if (settings.error || claims.error) return { show: false, claims: new Map<string, string>(), hidden: new Set<string>() };
     const m = new Map<string, string>();
-    for (const c of (claims.data ?? []) as unknown as { container_id: string; profiles: { username: string } | null }[]) {
-      if (c.profiles) m.set(c.container_id, c.profiles.username);
+    for (const c of (claims.data ?? []) as unknown as { container_id: string; common?: boolean; profiles: { username: string } | null }[]) {
+      if (c.common) m.set(c.container_id, COMMON_CLAIM);
+      else if (c.profiles) m.set(c.container_id, c.profiles.username);
     }
     const h = new Set(hidden.error ? [] : (hidden.data ?? []).map((r) => r.container_id as string));
     return { show: Boolean(settings.data?.show_unnamed), claims: m, hidden: h };

@@ -1,4 +1,4 @@
-import { aggregate, createMockWorld, type MockWorld } from "@mc/core";
+import { aggregate, COMMON_CLAIM, createMockWorld, type MockWorld } from "@mc/core";
 import type { Actions, Project, Snapshot } from "./types";
 
 /** Beispieldaten im Browser: dieselbe Mock-Welt wie der Mock-Sammler, nur ohne Supabase. */
@@ -158,6 +158,10 @@ export class DemoSource {
     claimContainer: async (id, mine) => {
       if (mine) this.claims.set(id, "Demo");
       else this.claims.delete(id);
+      this.emit();
+    },
+    claimCommon: async (id) => {
+      this.claims.set(id, COMMON_CLAIM);
       this.emit();
     },
     hideContainer: async (id, hidden) => {
