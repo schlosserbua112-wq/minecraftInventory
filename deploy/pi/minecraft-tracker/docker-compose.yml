@@ -16,6 +16,7 @@ services:
       HTTP_PORT: "8080"
       SETTINGS_FILE: /data/settings.json
       TZ: Europe/Berlin                    # Vollscan-/Karten-Uhrzeit in deutscher Zeit
+      SITE_URL: https://minecraft-tracker-eight.vercel.app   # Link „Zur Website“ auf der Kachel
     volumes:
       - settings:/data                     # Einstellungen der Kachel überleben Updates
     read_only: true
