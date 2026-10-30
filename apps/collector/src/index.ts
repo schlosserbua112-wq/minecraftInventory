@@ -1,10 +1,10 @@
-import { aggregate, createMockWorld, type ContainerSnapshot, type PlayerSnapshot } from "@mc/core";
+import { aggregate, createMockWorld, type ContainerSnapshot, type PlayerSnapshot, type UnnamedRule } from "@mc/core";
 import { loadConfig, missingLiveConfig } from "./config.js";
 import { startHealthServer, type HealthState } from "./health.js";
 import { LiveCollector } from "./live.js";
 import { LocalMapStore, SupabaseMapStore, type MapStore } from "./mapstore.js";
 import { defaultSettings, SettingsStore, type Settings } from "./settings.js";
-import { ConsoleSink, SupabaseSink, type HeartbeatExtra, type Sink } from "./sink.js";
+import { ConsoleSink, SupabaseSink, type HeartbeatExtra, type Sink, type UnnamedState } from "./sink.js";
 import { worldFiles } from "./worldfiles.js";
 
 const config = loadConfig();
@@ -23,9 +23,18 @@ function applySources(players: PlayerSnapshot[], containers: ContainerSnapshot[]
   return { players: keptPlayers, containers: s.zoneChests || s.fullScan ? containers : [] };
 }
 
+/**
+ * Was mit unbenannten Kisten ohne „Meine“-Markierung passiert: Die Pi-Kachel kann sie fest als Allgemein
+ * oder „Unbenannt“ zählen; steht sie auf „ignorieren“, entscheidet der Schalter in der Benutzerverwaltung.
+ */
+function unnamedRule(s: Settings, unnamed: UnnamedState): UnnamedRule {
+  if (s.unnamedChests !== "ignore") return s.unnamedChests;
+  return unnamed.show ? "unassigned" : "ignore";
+}
+
 /** Ein Durchlauf liefert Spieler und Kisten, egal ob Testdaten oder echter Server. */
 interface Source {
-  run(s: Settings, sink: Sink): Promise<{ players: PlayerSnapshot[]; containers: ContainerSnapshot[]; message?: string; extra?: HeartbeatExtra }>;
+  run(s: Settings, sink: Sink, wantUnnamed: (c: ContainerSnapshot) => boolean): Promise<{ players: PlayerSnapshot[]; containers: ContainerSnapshot[]; message?: string; extra?: HeartbeatExtra }>;
   close(): void;
 }
 
@@ -86,7 +95,7 @@ function liveSource(): Source {
   }
 
   return {
-    async run(s, sink) {
+    async run(s, sink, wantUnnamed) {
       if (!scanning) {
         const zoneDue = firstRun || Date.now() - lastZoneScan >= s.zoneScanMinutes * 60_000;
         const scans = await sink.takeScanRequests();
@@ -112,7 +121,7 @@ function liveSource(): Source {
         firstZoneScan = null;
         zoneScanDone = () => {};
       }
-      const result = await live.poll(s);
+      const result = await live.poll(s, wantUnnamed);
       const message = scanning ? "Scan läuft …" : scanMessage;
       return {
         ...result,
@@ -159,9 +168,12 @@ async function main() {
       if (s.paused) {
         await sink.heartbeat(config.mode, "pausiert");
       } else {
-        const { players, containers, message, extra } = await source.run(s, sink);
         const owners = await sink.loadOwners();
-        const result = aggregate(players, containers, s.unnamedChests, owners);
+        const unnamed = await sink.loadUnnamed();
+        const rule = unnamedRule(s, unnamed);
+        const wantUnnamed = (c: ContainerSnapshot) => rule !== "ignore" || unnamed.claims.has(c.id);
+        const { players, containers, message, extra } = await source.run(s, sink, wantUnnamed);
+        const result = aggregate(players, containers, rule, owners, unnamed.claims);
         await sink.write(players, containers, result, s.historyMinutes);
         await sink.heartbeat(config.mode, message, extra);
         Object.assign(health, { lastRunAt: new Date().toISOString(), lastError: null, rows: result.rows.length, unassigned: result.unassigned.length });
