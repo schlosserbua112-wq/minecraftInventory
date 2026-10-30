@@ -142,6 +142,7 @@ button:disabled{opacity:.5;cursor:default}
   <label class="row"><span class="txt">Kisten in den Zonen<small>Bekannte Kisten, Fässer und Shulkerkisten, per RCON</small></span><input type="checkbox" name="zoneChests"></label>
   <label class="row"><span class="txt">Vollscan der Welt<small>Alle Region-Dateien nach neuen Kisten durchsuchen, per FTP</small></span><input type="checkbox" name="fullScan"></label>
   <label class="row"><span class="txt">Weltkarte<small>Draufsicht der Oberwelt für die Website zeichnen, täglich zur Vollscan-Uhrzeit</small></span><input type="checkbox" name="map"></label>
+  <label class="row"><span class="txt">Entnahmen aus fremden Kisten<small>Positionen der Online-Spieler lesen und melden, wer etwas aus einer Spielerkiste in einer Zone genommen hat, per RCON</small></span><input type="checkbox" name="takes"></label>
   <label class="row"><span class="txt">Unbenannte Kisten in Zonen<small>Kisten ohne Namen, aber mit Inhalt. Ungeöffnete Loot-Kisten zählen nie. Als „Meine“ markierte Kisten zählen immer für den Spieler.</small></span><select name="unnamedChests"><option value="ignore">Schalter auf der Website</option><option value="common">als Allgemein zählen</option><option value="unassigned">als „Unbenannt“ zeigen</option></select></label>
 </section>
 
@@ -168,7 +169,7 @@ button:disabled{opacity:.5;cursor:default}
 </form>
 </main>
 <script>
-const SOURCES = ["inventories","enderChests","offlinePlayers","zoneChests","fullScan","map"];
+const SOURCES = ["inventories","enderChests","offlinePlayers","zoneChests","fullScan","map","takes"];
 const NUMBERS = ["pollSeconds","zoneScanMinutes","fullScanHour","historyMinutes"];
 const form = document.getElementById("form");
 const msg = document.getElementById("msg");

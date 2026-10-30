@@ -19,6 +19,10 @@ Name im Amboss: Spielername → Besitz des Spielers, `Allgemein` → Allgemeingu
 
 Unbenannte Kisten: Schaltet ein Admin sie unter „Benutzer“ ein, erscheinen unbenannte Kisten mit Inhalt aus den Zonen unter „Unbenannte Kisten“. Jeder kann eine anklicken und „Meine“ oder „Allgemeinheit“ wählen (zählt dann wie eine Kiste „Allgemein“); die Zuordnung hängt an der Position und übersteht neue Scans. Ungeöffnete Loot-Kisten tauchen nie auf, schon geöffnete lassen sich nicht von selbst gebauten unterscheiden. Solche Kisten blendet man mit „Keine Spielerkiste, ausblenden“ dauerhaft aus (wieder einblenden unter „Ausgeblendet“).
 
+## Entnahmen aus fremden Kisten
+
+Vanilla merkt sich nicht, wer eine Kiste geöffnet hat. Der Sammler vergleicht deshalb jede Abfrage mit der vorherigen: Fehlt in einer Spielerkiste in einer Zone etwas, schaut er, welcher andere Online-Spieler in der Nähe war (Position per RCON) und genau dieses Item dazubekommen hat. Stufen: „sicher“ (an der Kiste und Item bekommen), „wahrscheinlich“ (Item bekommen, in Reichweite), „möglich“ (an der Kiste, Item aber nicht im Inventar). Entnahmen durch den Besitzer selbst und ohne fremden Spieler in der Nähe (Trichter) werden nicht gemeldet. Die Website zeigt sie unter „Entnahmen“, jeder sieht seine Kisten, Admins alle. Auf der Pi-Kachel abschaltbar.
+
 ## Lokal starten
 
 ```bash

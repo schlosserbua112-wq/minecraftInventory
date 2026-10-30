@@ -23,6 +23,20 @@ export interface Project {
   owners: string[];
 }
 
+/** Entnahme aus einer Spielerkiste durch jemand anderen, vom Sammler geschätzt. Sichtbar für Besitzer und Admins. */
+export interface TakeRow {
+  id: number;
+  taken_at: string;
+  container_id: string;
+  owner_key: string;
+  owner_label: string;
+  item_id: string;
+  count: number;
+  suspects: string[];
+  confidence: "sicher" | "wahrscheinlich" | "möglich";
+  distance: number | null;
+}
+
 export interface Snapshot {
   players: PlayerRow[];
   containers: ContainerRow[];
@@ -62,5 +76,10 @@ export interface Actions {
   setShowUnnamed(on: boolean): Promise<void>;
   /** Unbenannte Kiste ausblenden (true) oder wieder einblenden (false). */
   hideContainer(id: string, hidden: boolean): Promise<void>;
+  /** Entnahmen aus den eigenen Kisten (Admins: aus allen), neueste zuerst. */
+  listTakes(): Promise<TakeRow[]>;
+  subscribeTakes(onChange: () => void): () => void;
+  /** Eintrag als erledigt entfernen. */
+  deleteTake(id: number): Promise<void>;
 }
 
