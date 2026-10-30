@@ -124,7 +124,7 @@ button:disabled{opacity:.5;cursor:default}
 </style>
 </head>
 <body>
-<header><h1>Minecraft-Sammler</h1><span id="mode" class="hint" style="margin:0"></span><a id="site" hidden>Zur Website</a></header>
+<header><h1>Minecraft-Sammler</h1><span id="mode" class="hint" style="margin:0"></span><a id="site" target="_blank" rel="noopener" hidden>Zur Website</a></header>
 <main>
 <section>
   <h2>Status</h2>
