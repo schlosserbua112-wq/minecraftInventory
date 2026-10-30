@@ -24,6 +24,7 @@ function ownerText(l: Location): string {
   if (r.owner_type === "player") return `${what} von ${r.owner_label}`;
   if (r.owner_type === "common") return `${what} · Allgemein`;
   if (r.owner_type === "project") return `${what} · Projekt ${r.owner_label}`;
+  if (r.owner_key === "unbenannt") return `Unbenannte ${what} · nicht zugeordnet`;
   return `${what} „${r.owner_label}“ · nicht zugeordnet`;
 }
 
