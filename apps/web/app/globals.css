@@ -83,7 +83,7 @@ h2 { font-size: 16px; }
 .chip[aria-pressed="true"] { background: var(--line); color: #fff; border-color: var(--line); }
 
 /* Suche */
-.side.side-wide { flex-basis: 520px; max-width: 560px; }
+.side.side-wide { flex-basis: var(--side-w, 520px); max-width: min(var(--side-w, 560px), calc(100vw - 600px)); transition: flex-basis 200ms ease-out, max-width 200ms ease-out; }
 .side > * { flex-shrink: 0; }
 .seg { display: flex; padding: 3px; gap: 2px; background: var(--sunken); border: 1px solid var(--line-strong); border-radius: var(--radius); }
 .seg button { flex: 1 1 0; min-height: 36px; padding: 0 14px; border: 0; border-radius: 3px; background: transparent; color: var(--muted); font: inherit; font-weight: 500; cursor: pointer; transition: background 150ms ease-out, color 150ms ease-out; }
@@ -153,7 +153,7 @@ tr:last-child td { border-bottom: 0; }
   .topbar { padding: 10px 16px; }
   .page { padding: 16px 16px 40px; }
   .side, .main.with-map { position: static; max-height: none; height: auto; }
-  .side { max-width: none; border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; }
+  .side, .side.side-wide { max-width: none; border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; }
   .main { padding: 16px; }
   .map { min-height: 380px; }
   .split { min-height: 0; }
