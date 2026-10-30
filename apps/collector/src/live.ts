@@ -184,14 +184,20 @@ export class LiveCollector {
   }
 
   /** Zonen-Scan; liefert die Zahl neu gefundener Kisten. */
-  async zoneScan(zones: Zone[], s: Settings): Promise<number> {
+  /**
+   * `save` nur bei einem angeforderten Scan („Jetzt scannen“): Speichern lässt den Server kurz ruckeln
+   * und meldet „Saved the game“ im Chat. Sonst reicht der Autosave des Servers (alle 5 Minuten).
+   */
+  async zoneScan(zones: Zone[], s: Settings, save = false): Promise<number> {
     let found = 0;
     try {
-      // Welt zuerst speichern, sonst sieht der Scan neue Kisten erst nach dem nächsten Autosave
-      try {
-        await this.rconCommand("save-all flush");
-      } catch (err) {
-        console.warn(`[live] save-all: ${err instanceof Error ? err.message : String(err)}`);
+      if (save) {
+        // Ohne "flush": der Server schreibt die Chunks nach und nach statt alles auf einmal
+        try {
+          await this.rconCommand("save-all");
+        } catch (err) {
+          console.warn(`[live] save-all: ${err instanceof Error ? err.message : String(err)}`);
+        }
       }
       await this.files.open();
       await this.loadNames();

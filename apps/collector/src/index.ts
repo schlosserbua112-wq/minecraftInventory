@@ -70,7 +70,7 @@ function liveSource(): Source {
     const zones = await sink.loadZones();
     const parts: string[] = [];
     const t = Date.now();
-    const found = await live.zoneScan(zones, s);
+    const found = await live.zoneScan(zones, s, scans.length > 0);
     lastZoneScan = Date.now();
     parts.push(`Zonen-Scan: ${found} neue Kisten (${Math.round((Date.now() - t) / 1000)} s)`);
     await sink.finishScanRequests(scans, `${found} neue Kisten gefunden`);
