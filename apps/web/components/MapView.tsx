@@ -86,6 +86,16 @@ export function MapView({
   const [error, setError] = useState("");
   const box = useRef<HTMLDivElement>(null);
   const world = useWorldMap();
+  const [redrawError, setRedrawError] = useState("");
+  const redrawing = snapshot?.scans.some((r) => r.kind === "map" && !r.finished_at) ?? false;
+  async function redrawMap() {
+    setRedrawError("");
+    try {
+      await actions.requestScan("map");
+    } catch (err) {
+      setRedrawError(err instanceof Error ? err.message : String(err));
+    }
+  }
   const [showWorld, setShowWorld] = useState(true);
   const [showLandmarks, setShowLandmarksState] = useState(true);
   // Schalter für Landmarks je Browser merken
@@ -433,6 +443,12 @@ export function MapView({
           <button type="button" className="btn btn-quiet btn-small" onClick={() => setTool(null)}>Abbrechen</button>
         </div>
       )}
+      {!tool && (redrawing || redrawError) && (
+        <div className="map-hint" data-ui role="status">
+          <span className={redrawError ? "map-card-error" : undefined}>{redrawError || "Der Pi zeichnet die Karte neu. Das dauert ein paar Minuten."}</span>
+          {redrawError && <button type="button" className="btn btn-quiet btn-small" onClick={() => setRedrawError("")}>Schließen</button>}
+        </div>
+      )}
       {card && (
         <MapCard
           card={card}
@@ -493,6 +509,18 @@ export function MapView({
         {admin && (
           <button type="button" className="btn" aria-label="Scan-Zone ziehen" title="Scan-Zone ziehen" aria-pressed={tool === "zone"} onClick={() => pickTool("zone")}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="8" strokeDasharray="3 3" /><circle cx="12" cy="12" r="1.5" fill="currentColor" /><path d="M12 12h8" /></svg>
+          </button>
+        )}
+        {admin && (
+          <button
+            type="button"
+            className="btn"
+            aria-label="Karte neu zeichnen"
+            title={redrawing ? "Karte wird neu gezeichnet …" : world.updatedAt ? `Karte neu zeichnen (zuletzt ${new Date(world.updatedAt).toLocaleString("de-DE")})` : "Karte neu zeichnen"}
+            disabled={redrawing}
+            onClick={redrawMap}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" className={redrawing ? "spin" : undefined}><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" /></svg>
           </button>
         )}
       </div>

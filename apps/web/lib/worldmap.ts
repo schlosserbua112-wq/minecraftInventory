@@ -21,7 +21,9 @@ interface MapIndex {
  * Ohne Anmeldung oder ohne Karte: leere Liste, die Karte bleibt dann schematisch.
  */
 export function useWorldMap(): { tiles: MapTile[]; updatedAt: string | null } {
-  const { mode, session } = useData();
+  const { mode, session, snapshot } = useData();
+  // Nach einem "Karte neu zeichnen" die Kacheln neu laden
+  const redrawn = snapshot?.scans.find((r) => r.kind === "map" && r.finished_at)?.finished_at ?? null;
   const [state, setState] = useState<{ tiles: MapTile[]; updatedAt: string | null }>({ tiles: [], updatedAt: null });
 
   useEffect(() => {
@@ -41,14 +43,16 @@ export function useWorldMap(): { tiles: MapTile[]; updatedAt: string | null } {
       const tiles: MapTile[] = [];
       for (const s of signed ?? []) {
         const m = /r\.(-?\d+)\.(-?\d+)\.png$/.exec(s.path ?? "");
-        if (m && s.signedUrl) tiles.push({ x: Number(m[1]) * 512, z: Number(m[2]) * 512, url: s.signedUrl });
+        const hash = index.tiles[`r.${m?.[1]}.${m?.[2]}`];
+        // Hash anhängen, damit geänderte Kacheln nicht aus dem Cache kommen
+        if (m && s.signedUrl) tiles.push({ x: Number(m[1]) * 512, z: Number(m[2]) * 512, url: hash ? `${s.signedUrl}&v=${hash}` : s.signedUrl });
       }
       if (!cancelled) setState({ tiles, updatedAt: index.updated_at });
     })().catch((err) => console.warn("Weltkarte nicht geladen:", err));
     return () => {
       cancelled = true;
     };
-  }, [mode, session?.user.id]);
+  }, [mode, session?.user.id, redrawn]);
 
   return state;
 }

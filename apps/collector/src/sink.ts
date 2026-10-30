@@ -5,8 +5,8 @@ import { COMMON_CLAIM, regionOf, type AggregateResult, type ContainerSnapshot, t
 export interface Sink {
   write(players: PlayerSnapshot[], containers: ContainerSnapshot[], result: AggregateResult, historyMinutes?: number): Promise<void>;
   heartbeat(mode: string, message?: string, extra?: HeartbeatExtra): Promise<void>;
-  /** Offene "Jetzt suchen"-Anfragen abholen und als gestartet markieren. */
-  takeScanRequests(): Promise<number[]>;
+  /** Offene "Jetzt suchen"- und "Karte neu zeichnen"-Anfragen abholen und als gestartet markieren. */
+  takeScanRequests(): Promise<ScanRequest[]>;
   finishScanRequests(ids: number[], result: string): Promise<void>;
   /** Zonen aus der Verwaltung der Website. */
   loadZones(): Promise<Zone[]>;
@@ -23,6 +23,12 @@ export interface UnnamedState {
   claims: Map<string, string>;
   /** Auf der Website als „keine Spielerkiste“ ausgeblendet. */
   hidden: Set<string>;
+}
+
+export interface ScanRequest {
+  id: number;
+  /** "map": zusätzlich die Weltkarte neu zeichnen (nur Admins) */
+  kind: "scan" | "map";
 }
 
 export interface HeartbeatExtra {
@@ -138,12 +144,15 @@ export class SupabaseSink implements Sink {
     );
   }
 
-  async takeScanRequests() {
-    const { data, error } = await this.db.from("scan_requests").select("id").is("started_at", null);
+  async takeScanRequests(): Promise<ScanRequest[]> {
+    const open = (cols: string) => this.db.from("scan_requests").select(cols).is("started_at", null);
+    let { data, error } = await open("id, kind");
+    // Spalte "kind" fehlt noch (SQL nicht ausgeführt): alles sind normale Suchanfragen
+    if (error?.code === "42703") ({ data, error } = await open("id"));
     if (error) throw error;
-    const ids = (data ?? []).map((r) => r.id as number);
-    if (ids.length) await this.check(this.db.from("scan_requests").update({ started_at: new Date().toISOString() }).in("id", ids));
-    return ids;
+    const requests = ((data ?? []) as unknown as { id: number; kind?: string }[]).map((r): ScanRequest => ({ id: r.id, kind: r.kind === "map" ? "map" : "scan" }));
+    if (requests.length) await this.check(this.db.from("scan_requests").update({ started_at: new Date().toISOString() }).in("id", requests.map((r) => r.id)));
+    return requests;
   }
 
   async finishScanRequests(ids: number[], result: string) {
@@ -233,7 +242,7 @@ export class ConsoleSink implements Sink {
     console.log(`[console] ${result.rows.length} Zeilen, ${total} Items, ${result.unassigned.length} nicht zugeordnet`);
   }
   async heartbeat() {}
-  async takeScanRequests() {
+  async takeScanRequests(): Promise<ScanRequest[]> {
     return [];
   }
   async finishScanRequests() {}

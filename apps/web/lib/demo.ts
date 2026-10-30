@@ -102,13 +102,13 @@ export class DemoSource {
   }
 
   actions: Actions = {
-    requestScan: async () => {
+    requestScan: async (kind = "scan") => {
       const id = this.nextId++;
-      this.base.scans.unshift({ id, requested_at: new Date().toISOString(), finished_at: null, result: null });
+      this.base.scans.unshift({ id, requested_at: new Date().toISOString(), finished_at: null, result: null, kind });
       this.emit();
       setTimeout(() => {
         const s = this.base.scans.find((x) => x.id === id);
-        if (s) Object.assign(s, { finished_at: new Date().toISOString(), result: "Demo: keine neuen Kisten gefunden" });
+        if (s) Object.assign(s, { finished_at: new Date().toISOString(), result: kind === "map" ? "Demo: Karte neu gezeichnet" : "Demo: keine neuen Kisten gefunden" });
         this.emit();
       }, 2500);
     },

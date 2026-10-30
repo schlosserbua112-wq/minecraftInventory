@@ -10,7 +10,7 @@ export interface ZoneRow { id: number; name: string; dimension: string; center_x
 export interface LandmarkRow { id: number; name: string; color: string; x: number; z: number; created_by: string | null }
 export type LandmarkInput = Pick<LandmarkRow, "name" | "color" | "x" | "z">;
 export interface StatusRow { heartbeat_at: string; mode: string | null; message: string | null }
-export interface ScanRow { id: number; requested_at: string; finished_at: string | null; result: string | null }
+export interface ScanRow { id: number; requested_at: string; finished_at: string | null; result: string | null; kind?: "scan" | "map" }
 /** Projekt: benötigte Items und die Kisten, deren Inhalt dazu zählt. Für alle sichtbar. */
 export interface Project {
   id: number;
@@ -52,7 +52,8 @@ export interface Snapshot {
 }
 
 export interface Actions {
-  requestScan(): Promise<void>;
+  /** "map": Weltkarte sofort neu zeichnen lassen (nur Admins) */
+  requestScan(kind?: "scan" | "map"): Promise<void>;
   addZone(z: Omit<ZoneRow, "id">): Promise<void>;
   removeZone(id: number): Promise<void>;
   addLandmark(l: LandmarkInput): Promise<void>;
