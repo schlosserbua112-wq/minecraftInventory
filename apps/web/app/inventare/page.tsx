@@ -51,7 +51,7 @@ export default function InventoriesPage() {
   return (
     <main className="split">
       <section className="side" aria-label="Spieler">
-        <h1>Inventare</h1>
+        <h1>Wer hat was?</h1>
         <div className="list">
           {players.map((p) => {
             const acc = accountOf.get(p.name.toLowerCase());
