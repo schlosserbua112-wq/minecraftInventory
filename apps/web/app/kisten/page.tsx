@@ -67,6 +67,12 @@ export default function UnnamedChestsPage() {
 
   const chest = chests.find((c) => c.id === selected);
   const rows = chest ? snapshot.stock.filter((r) => r.source_kind === "container" && r.source_id === chest.id) : [];
+  // Kisten in derselben Spalte und direkt daneben (Doppelkisten, Stapel), oben zuerst
+  const nearby = chest
+    ? chests
+        .filter((c) => c.dimension === chest.dimension && Math.abs(c.x - chest.x) <= 1 && Math.abs(c.z - chest.z) <= 1)
+        .sort((a, b) => b.y - a.y || a.x - b.x || a.z - b.z)
+    : [];
   const canRelease = chest && !chest.free && (chest.mine || chest.common || profile?.is_admin);
 
   async function act(fn: () => Promise<void>) {
@@ -135,6 +141,23 @@ export default function UnnamedChestsPage() {
               )}
             </div>
             {error && <p role="alert" style={{ margin: 0, color: "var(--down)" }}>{error}</p>}
+            {nearby.length > 1 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <span className="muted small">{nearby.length} Kisten an dieser Stelle</span>
+                <div className="list" aria-label="Kisten an dieser Stelle">
+                  {nearby.map((c) => (
+                    <button key={c.id} type="button" className="item-row" aria-current={c.id === chest.id} onClick={() => { setSelected(c.id); setError(""); }}>
+                      <span className="dot" style={{ background: OWNER_COLOR[c.owner_type!] }} />
+                      <span className="grow">
+                        <span>{kindLabel(c.kind)} · Höhe {c.y}</span>
+                        <span className="sub">{ownerText(c)} · {coords(c)}</span>
+                      </span>
+                      <span className="qty">{fmt.format(c.items)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="panel">
               <div className="panel-head"><h2>Inhalt</h2><span className="faint num">{fmt.format(chest.items)}</span></div>
               <ItemTable rows={rows} empty="Die Kiste ist leer." />
