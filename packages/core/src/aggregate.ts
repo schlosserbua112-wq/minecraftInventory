@@ -27,6 +27,9 @@ function rowsFor(
   }));
 }
 
+/** Wert in `claims` für Kisten, die jemand der Allgemeinheit zugeordnet hat. */
+export const COMMON_CLAIM = "\u0000allgemein";
+
 /** Was mit unbenannten Kisten passiert, die Items enthalten (generierte Loot-Kisten zählen nie). */
 export type UnnamedRule = "ignore" | "common" | "unassigned";
 
@@ -39,7 +42,8 @@ const UNNAMED_OWNER: Record<Exclude<UnnamedRule, "ignore">, Owner> = {
  * Macht aus Spieler- und Kisten-Snapshots die Zeilen für `stock_items`.
  * `owners`: Konten mit Aliasen, als Map von Name/Alias (klein geschrieben) auf den Kontonamen.
  * Ein Spieler, dessen Minecraft-Name ein Alias ist, gehört dann zum Konto.
- * `claims`: unbenannte Kisten, die ein Spieler auf der Website als „Meine“ markiert hat, Kisten-ID → Kontoname.
+ * `claims`: unbenannte Kisten, die ein Spieler auf der Website als „Meine“ markiert hat, Kisten-ID → Kontoname
+ * (oder `COMMON_CLAIM` für „Allgemeinheit“).
  */
 export function aggregate(
   players: PlayerSnapshot[],
@@ -65,7 +69,7 @@ export function aggregate(
   for (const c of containers) {
     let owner = classifyName(c.customName, names);
     const claim = c.customName ? undefined : claims.get(c.id);
-    if (!owner && claim) owner = { type: "player", key: claim.toLowerCase(), label: claim };
+    if (!owner && claim) owner = claim === COMMON_CLAIM ? UNNAMED_OWNER.common : { type: "player", key: claim.toLowerCase(), label: claim };
     if (!owner && unnamed !== "ignore" && !c.generated && c.items.length) owner = UNNAMED_OWNER[unnamed];
     if (!owner) continue;
     byContainer.set(c.id, owner);

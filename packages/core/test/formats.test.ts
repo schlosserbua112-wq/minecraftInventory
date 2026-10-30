@@ -128,6 +128,13 @@ describe("unbenannte Kisten", () => {
     expect(r.owners.get("c")?.key).toBe("unbenannt");
     expect(aggregate([], chests, "ignore", new Map(), claims).owners.has("a")).toBe(true);
   });
+
+  it("zählen als Allgemein, wenn jemand sie der Allgemeinheit zugeordnet hat", async () => {
+    const { aggregate, COMMON_CLAIM } = await import("../src/index.js");
+    const chest = { id: "a", dimension: "minecraft:overworld", x: 1, y: 64, z: 0, kind: "chest" as const, customName: null, items: [{ id: "minecraft:stone", count: 5 }] };
+    const r = aggregate([], [chest], "ignore", new Map(), new Map([["a", COMMON_CLAIM]]));
+    expect(r.rows).toEqual([expect.objectContaining({ owner_type: "common", owner_key: "allgemein", count: 5 })]);
+  });
 });
 
 describe("Weltkarte", () => {
