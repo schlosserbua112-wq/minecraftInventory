@@ -61,7 +61,7 @@ export default function UsersPage() {
           </label>
           <label className="field" style={{ flex: "2 1 180px" }}>
             Startpasswort
-            <input className="input" required minLength={8} type="text" autoComplete="off" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+            <input className="input" required type="text" autoComplete="off" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
           </label>
           <label className="chip" style={{ cursor: "pointer" }}>
             <input type="checkbox" checked={form.admin} onChange={(e) => setForm({ ...form, admin: e.target.checked })} />
@@ -99,7 +99,7 @@ export default function UsersPage() {
                           }}
                         >
                           <label className="sr-only" htmlFor={`pw-${u.id}`}>Neues Passwort für {u.username}</label>
-                          <input id={`pw-${u.id}`} className="input" type="text" minLength={8} required autoComplete="off" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="neues Passwort" />
+                          <input id={`pw-${u.id}`} className="input" type="text" required autoComplete="off" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="neues Passwort" />
                           <button className="btn" type="submit">Setzen</button>
                           <button className="btn btn-quiet" type="button" onClick={() => setPwFor(null)}>Abbrechen</button>
                         </form>

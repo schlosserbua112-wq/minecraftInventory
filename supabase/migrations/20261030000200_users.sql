@@ -44,7 +44,7 @@ declare
   mail text := private.login_email(p_username);
 begin
   if p_username !~ '^[A-Za-z0-9_]{2,32}$' then raise exception 'Name: 2–32 Zeichen, nur Buchstaben, Ziffern und _'; end if;
-  if length(p_password) < 8 then raise exception 'Passwort: mindestens 8 Zeichen'; end if;
+  if coalesce(p_password, '') = '' then raise exception 'Passwort darf nicht leer sein'; end if;
   if exists (select 1 from public.profiles where lower(username) = lower(p_username)) then
     raise exception 'Den Namen % gibt es schon', p_username;
   end if;
@@ -88,7 +88,7 @@ returns void
 language plpgsql security definer set search_path = public, extensions as $$
 begin
   if not private.is_admin() then raise exception 'Nur Admins dürfen Passwörter setzen'; end if;
-  if length(p_password) < 8 then raise exception 'Passwort: mindestens 8 Zeichen'; end if;
+  if coalesce(p_password, '') = '' then raise exception 'Passwort darf nicht leer sein'; end if;
   update auth.users set encrypted_password = crypt(p_password, gen_salt('bf')), updated_at = now() where id = p_user;
   update public.profiles set must_change_password = (p_user <> auth.uid()) where id = p_user;
 end $$;
@@ -117,7 +117,7 @@ returns void
 language plpgsql security definer set search_path = public, extensions as $$
 begin
   if auth.uid() is null then raise exception 'Nicht angemeldet'; end if;
-  if length(p_new) < 8 then raise exception 'Passwort: mindestens 8 Zeichen'; end if;
+  if coalesce(p_new, '') = '' then raise exception 'Passwort darf nicht leer sein'; end if;
   if not exists (select 1 from auth.users where id = auth.uid() and encrypted_password = crypt(p_old, encrypted_password)) then
     raise exception 'Das alte Passwort stimmt nicht';
   end if;

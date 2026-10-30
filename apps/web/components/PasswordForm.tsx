@@ -12,7 +12,6 @@ export function PasswordForm({ onDone }: { onDone?: () => void }) {
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (newPw.length < 8) return setState({ kind: "error", text: "Das neue Passwort braucht mindestens 8 Zeichen." });
     if (newPw !== repeat) return setState({ kind: "error", text: "Die beiden neuen Passwörter sind nicht gleich." });
     setState({ kind: "busy" });
     try {
@@ -35,11 +34,11 @@ export function PasswordForm({ onDone }: { onDone?: () => void }) {
       </label>
       <label className="field">
         Neues Passwort
-        <input className="input" type="password" required minLength={8} autoComplete="new-password" value={newPw} onChange={(e) => setNewPw(e.target.value)} />
+        <input className="input" type="password" required autoComplete="new-password" value={newPw} onChange={(e) => setNewPw(e.target.value)} />
       </label>
       <label className="field">
         Neues Passwort wiederholen
-        <input className="input" type="password" required minLength={8} autoComplete="new-password" value={repeat} onChange={(e) => setRepeat(e.target.value)} />
+        <input className="input" type="password" required autoComplete="new-password" value={repeat} onChange={(e) => setRepeat(e.target.value)} />
       </label>
       <div className="row">
         <button className="btn btn-primary" type="submit" disabled={state.kind === "busy"}>
