@@ -128,6 +128,7 @@ export default function SearchPage() {
   const me = owners.find((o) => o.isMe);
   const hiddenPicked = mode === "players" ? picked.filter((o) => o.hidden) : [];
   const openChest = chest ? snapshot.containers.find((c) => c.id === chest) : undefined;
+  const itemsIn = (id: string) => snapshot.stock.reduce((n, r) => (r.source_kind === "container" && r.source_id === id ? n + r.count : n), 0);
   const pickPin = (id: string) => {
     setSelected(id);
     setChest(id);
@@ -236,6 +237,11 @@ export default function SearchPage() {
             rows={snapshot.stock.filter((r) => r.source_kind === "container" && r.source_id === openChest.id)}
             owner={openChest.owner_type === "player" ? ownerOf.get(openChest.owner_key ?? "") : undefined}
             color={pins.find((p) => p.id === openChest.id)?.color ?? OWNER_COLOR[openChest.owner_type ?? "unassigned"]}
+            nearby={snapshot.containers.filter(
+              (c) => c.owner_type && c.dimension === openChest.dimension && Math.abs(c.x - openChest.x) <= 1 && Math.abs(c.z - openChest.z) <= 1,
+            )}
+            itemsIn={itemsIn}
+            onPick={pickPin}
             backLabel={item ? itemName(item) : "Alle Items"}
             onBack={() => setChest(null)}
           />
@@ -245,7 +251,7 @@ export default function SearchPage() {
             places={places}
             parts={parts(places.map((p) => p.row))}
             selected={selected}
-            onSelect={setSelected}
+            onSelect={(id) => (snapshot.containers.some((c) => c.id === id) ? pickPin(id) : setSelected(id))}
             onBack={() => setItem(null)}
             color={(r) => colorOf(r, scope, owners)}
           />
@@ -426,6 +432,9 @@ function ChestDetail({
   rows,
   owner,
   color,
+  nearby,
+  itemsIn,
+  onPick,
   backLabel,
   onBack,
 }: {
@@ -433,6 +442,10 @@ function ChestDetail({
   rows: StockRow[];
   owner?: Owner;
   color: string;
+  /** Kisten in derselben Spalte und direkt daneben, inklusive dieser */
+  nearby: ContainerRow[];
+  itemsIn: (id: string) => number;
+  onPick: (id: string) => void;
   backLabel: string;
   onBack: () => void;
 }) {
@@ -453,6 +466,25 @@ function ChestDetail({
           {kindLabel(chest.kind)} bei {coords(chest)}
         </span>
       </div>
+      {nearby.length > 1 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <span className="muted small">{nearby.length} Kisten an dieser Stelle</span>
+          <div className="list" aria-label="Kisten an dieser Stelle">
+            {[...nearby]
+              .sort((a, b) => b.y - a.y || a.x - b.x || a.z - b.z)
+              .map((c) => (
+                <button key={c.id} type="button" className="item-row" aria-current={c.id === chest.id} onClick={() => onPick(c.id)}>
+                  <span className="dot" style={{ background: OWNER_COLOR[c.owner_type ?? "unassigned"] }} />
+                  <span className="grow">
+                    <span>{c.custom_name ? `„${c.custom_name}“` : kindLabel(c.kind)} · Höhe {c.y}</span>
+                    <span className="sub">{coords(c)}</span>
+                  </span>
+                  <span className="qty">{fmt.format(itemsIn(c.id))}</span>
+                </button>
+              ))}
+          </div>
+        </div>
+      )}
       <div className="panel">
         <div className="panel-head"><h2>Inhalt</h2><span className="faint num">{fmt.format(total)}</span></div>
         <ItemTable rows={rows} empty="Die Kiste ist leer." />

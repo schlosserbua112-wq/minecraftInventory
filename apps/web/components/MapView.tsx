@@ -289,6 +289,17 @@ export function MapView({
   ];
   const draftZone = card?.kind === "zone" && card.id === null ? card : null;
   const mark = 14 * k;
+  /** Kisten in derselben Spalte (gleiches x/z) teilen sich einen Pin; die gewählte liegt oben und wird zuletzt gezeichnet. */
+  const stacks = useMemo(() => {
+    const byColumn = new Map<string, MapPin[]>();
+    for (const p of pins) {
+      const key = `${p.x},${p.z}`;
+      byColumn.set(key, [...(byColumn.get(key) ?? []), p]);
+    }
+    return [...byColumn.values()]
+      .map((group) => ({ pin: group.find((p) => p.id === selectedId) ?? group[0], count: group.length, titles: group.map((p) => p.title) }))
+      .sort((a, b) => Number(a.pin.id === selectedId) - Number(b.pin.id === selectedId));
+  }, [pins, selectedId]);
   const legendItems = legend ?? [...new Set(pins.map((p) => p.ownerType))].map((t) => ({ label: OWNER_LABEL[t], color: OWNER_COLOR[t] }));
 
   return (
@@ -355,12 +366,12 @@ export function MapView({
         <circle cx={0} cy={0} r={3 * k} fill="#fff" fillOpacity="0.8">
           <title>0 / 0</title>
         </circle>
-        {pins.map((p) => {
+        {stacks.map(({ pin: p, count, titles }) => {
           const sel = p.id === selectedId;
-          const s = sel ? pinSize * 1.15 : p.label ? pinSize : pinSize * 0.5;
+          const s = sel ? pinSize * 1.15 : p.label || count > 1 ? pinSize : pinSize * 0.5;
           return (
             <g key={p.id} data-pin onClick={() => onSelect?.(p.id)} style={{ cursor: onSelect ? "pointer" : "default" }}>
-              <title>{p.title}</title>
+              <title>{count > 1 ? `${count} Kisten übereinander:\n${titles.join("\n")}` : p.title}</title>
               <rect
                 x={p.x - s / 2}
                 y={p.z - s / 2}
@@ -372,9 +383,13 @@ export function MapView({
                 strokeOpacity={sel ? 1 : 0.35}
                 strokeWidth={(sel ? 3 : 1) * k}
               />
-              {p.label && (
+              {count > 1 && (
+                // Versetzte Kante dahinter: hier liegen mehrere Kisten übereinander
+                <rect x={p.x - s / 2 + 3 * k} y={p.z - s / 2 - 3 * k} width={s} height={s} rx={3 * k} fill="none" stroke="#fff" strokeOpacity={0.7} strokeWidth={1.5 * k} pointerEvents="none" />
+              )}
+              {(p.label || count > 1) && (
                 <text x={p.x} y={p.z + 4.5 * k} fontSize={13 * k} fontWeight={600} textAnchor="middle" fill="#20251f">
-                  {p.label}
+                  {p.label ?? `${count}`}
                 </text>
               )}
             </g>
