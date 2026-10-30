@@ -7,7 +7,7 @@
 //
 // Zum Hochladen fragt das Skript nach Name und Passwort eines Admin-Kontos der Website
 // (oder MC_USER / MC_PASS als Umgebungsvariablen).
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline/promises";
@@ -19,7 +19,7 @@ const args = process.argv.slice(2);
 const onlyFile = args.includes("--nur-datei");
 const jarArg = args.find((a) => !a.startsWith("--"));
 
-/** Neueste Client-Jar unter .minecraft/versions (nach Änderungsdatum). */
+/** Neueste Client-Jar unter .minecraft/versions: höchste Versionsnummer, Vollversionen vor Snapshots. */
 function findJar() {
   const base = process.env.APPDATA ? join(process.env.APPDATA, ".minecraft") : join(homedir(), ".minecraft");
   const versions = join(base, "versions");
@@ -27,7 +27,11 @@ function findJar() {
   const jars = readdirSync(versions)
     .map((v) => join(versions, v, `${v}.jar`))
     .filter((p) => existsSync(p))
-    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+    .sort((a, b) => {
+      const va = a.split(/[\\/]/).at(-2), vb = b.split(/[\\/]/).at(-2);
+      const pre = (v) => Number(!/^\d+(\.\d+)*$/.test(v));
+      return pre(va) - pre(vb) || vb.localeCompare(va, "en", { numeric: true });
+    });
   if (!jars.length) throw new Error(`Keine Client-Jar in ${versions}. Einmal die Version im Launcher starten.`);
   return jars[0];
 }
