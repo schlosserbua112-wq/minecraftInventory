@@ -7,7 +7,8 @@ import { useData } from "@/lib/data";
 import { ago, coords, kindLabel } from "@/lib/derive";
 
 export default function AdminPage() {
-  const { snapshot, actions } = useData();
+  const { snapshot, actions, profile } = useData();
+  const admin = Boolean(profile?.is_admin);
   const [form, setForm] = useState({ name: "", x: "0", z: "0", r: "200" });
   const [busy, setBusy] = useState(false);
   if (!snapshot) return <div className="page"><Loading /></div>;
@@ -54,7 +55,7 @@ export default function AdminPage() {
 
       <div className="cols">
         <section className="panel" aria-labelledby="zones">
-          <div className="panel-head"><h2 id="zones">Zonen</h2><span className="faint">Region-Dateien, die regelmäßig geprüft werden</span></div>
+          <div className="panel-head"><h2 id="zones">Zonen</h2><span className="faint">{admin ? "Auch auf der Karte ziehbar" : "Nur Admins legen Zonen an"}</span></div>
           <div className="list" style={{ padding: "4px 16px" }}>
             {snapshot.zones.length === 0 && <p className="empty">Noch keine Zone. Leg die Hauptbasis an: Mittelpunkt und Radius in Blöcken.</p>}
             {snapshot.zones.map((z) => (
@@ -63,19 +64,21 @@ export default function AdminPage() {
                   <span>{z.name}{z.is_main && <span className="faint"> · Hauptzone</span>}</span>
                   <span className="sub">{z.center_x} / {z.center_z}, Radius {z.radius} · {regionsForZone(z.center_x, z.center_z, z.radius).join(", ")}</span>
                 </span>
-                <button type="button" className="btn btn-quiet" aria-label={`${z.name} löschen`} onClick={() => actions.removeZone(z.id)}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
-                </button>
+                {admin && (
+                  <button type="button" className="btn btn-quiet" aria-label={`${z.name} löschen`} onClick={() => actions.removeZone(z.id)}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                  </button>
+                )}
               </div>
             ))}
           </div>
-          <form onSubmit={addZone} className="panel-body row" style={{ borderTop: "1px solid var(--line)", alignItems: "flex-end" }}>
+          {admin && <form onSubmit={addZone} className="panel-body row" style={{ borderTop: "1px solid var(--line)", alignItems: "flex-end" }}>
             <label className="field" style={{ flex: "2 1 160px" }}>Name<input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="z. B. Farm im Norden" /></label>
             <label className="field" style={{ flex: "1 1 80px" }}>x<input className="input num" inputMode="numeric" value={form.x} onChange={(e) => setForm({ ...form, x: e.target.value })} /></label>
             <label className="field" style={{ flex: "1 1 80px" }}>z<input className="input num" inputMode="numeric" value={form.z} onChange={(e) => setForm({ ...form, z: e.target.value })} /></label>
             <label className="field" style={{ flex: "1 1 80px" }}>Radius<input className="input num" inputMode="numeric" value={form.r} onChange={(e) => setForm({ ...form, r: e.target.value })} /></label>
             <button className="btn" type="submit">Zone anlegen</button>
-          </form>
+          </form>}
         </section>
 
         <section className="panel" aria-labelledby="unassigned">

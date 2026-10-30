@@ -5,6 +5,11 @@ import type { Actions, Dashboard, HistoryRow, Snapshot } from "./types";
 export class DemoSource {
   private world: MockWorld = createMockWorld();
   private base: Omit<Snapshot, "players" | "containers" | "stock" | "status" | "showUnnamed" | "hidden"> = {
+    landmarks: [
+      { id: 1, name: "Spawn", color: "#e9c46a", x: 12, z: -40, created_by: "demo" },
+      { id: 2, name: "Dorf am See", color: "#7fb3e6", x: -310, z: 220, created_by: "demo" },
+      { id: 3, name: "Netherportal", color: "#b48ce0", x: 180, z: 95, created_by: "demo-lena" },
+    ],
     zones: [
       { id: 1, name: "Hauptbasis", dimension: "minecraft:overworld", center_x: 0, center_z: 0, radius: 400, is_main: true },
       { id: 2, name: "Außenposten Mesa", dimension: "minecraft:overworld", center_x: 900, center_z: -650, radius: 120, is_main: false },
@@ -87,6 +92,18 @@ export class DemoSource {
     },
     removeZone: async (id) => {
       this.base.zones = this.base.zones.filter((z) => z.id !== id);
+      this.emit();
+    },
+    addLandmark: async (l) => {
+      this.base.landmarks.push({ ...l, id: this.nextId++, created_by: "demo" });
+      this.emit();
+    },
+    updateLandmark: async (id, l) => {
+      this.base.landmarks = this.base.landmarks.map((x) => (x.id === id ? { ...x, ...l } : x));
+      this.emit();
+    },
+    removeLandmark: async (id) => {
+      this.base.landmarks = this.base.landmarks.filter((x) => x.id !== id);
       this.emit();
     },
     loadHistory: async (itemId, days) => {
