@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { StockRow } from "@mc/core";
-import type { Actions, Project, Snapshot, TakeRow } from "./types";
+import type { Actions, PlayerStatsRow, Project, Snapshot, TakeRow } from "./types";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -197,6 +197,19 @@ export function supabaseActions(refresh: () => void): Actions {
       const { data, error } = await db().from("container_takes").delete().eq("id", id).select("id");
       if (error) throw new Error(error.message);
       if (!data?.length) throw new Error("Das darfst du nicht. Löschen kann nur der Besitzer der Kiste oder ein Admin.");
+    },
+    listStats: async () => {
+      const { data, error } = await db().from("player_stats").select("uuid, name, stats, updated_at");
+      if (error?.code === "42P01" || error?.code === "PGRST205") throw new Error("Die Tabelle für Statistiken fehlt noch. Das SQL dafür muss einmal in Supabase laufen.");
+      if (error) throw new Error(error.message);
+      return (data ?? []) as PlayerStatsRow[];
+    },
+    subscribeStats: (onChange) => {
+      const channel = db().channel("stats").on("postgres_changes", { event: "*", schema: "public", table: "player_stats" }, onChange);
+      channel.subscribe();
+      return () => {
+        db().removeChannel(channel);
+      };
     },
   };
 }

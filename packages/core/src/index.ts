@@ -9,3 +9,4 @@ export * from "./materials.js";
 export * from "./snbt.js";
 export * from "./world.js";
 export * from "./takes.js";
+export * from "./stats.js";

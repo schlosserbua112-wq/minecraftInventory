@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { PlayerStatsRow } from "./live.js";
 import { COMMON_CLAIM, regionOf, type AggregateResult, type ContainerSnapshot, type PlayerSnapshot, type StockRow, type TakeConfidence, type TakeEvent } from "@mc/core";
 
 /** Ziel für die gesammelten Daten. */
@@ -16,6 +17,8 @@ export interface Sink {
   loadUnnamed(): Promise<UnnamedState>;
   /** Entnahmen aus fremden Kisten speichern. Fehler werden nur gemeldet, die Runde läuft weiter. */
   writeTakes(events: TakeEvent[]): Promise<void>;
+  /** Spielerstatistiken speichern (nur geänderte). Fehler werden nur gemeldet. */
+  writeStats(rows: PlayerStatsRow[]): Promise<void>;
 }
 
 export interface UnnamedState {
@@ -220,6 +223,26 @@ export class SupabaseSink implements Sink {
     }
   }
 
+  /** Zuletzt geschriebene Statistik je Spieler, als JSON zum Vergleichen. */
+  private lastStats = new Map<string, string>();
+  private statsWarned = false;
+
+  async writeStats(rows: PlayerStatsRow[]) {
+    const changed = rows.filter((r) => this.lastStats.get(r.uuid) !== JSON.stringify([r.name, r.stats]));
+    if (!changed.length) return;
+    const now = new Date().toISOString();
+    const { error } = await this.db.from("player_stats").upsert(changed.map((r) => ({ uuid: r.uuid, name: r.name, stats: r.stats, updated_at: now })));
+    if (error) {
+      // Tabelle fehlt noch (SQL nicht ausgeführt): einmal melden, Bestände laufen weiter
+      if (!this.statsWarned) console.warn(`[sink] Statistiken nicht gespeichert: ${error.message}`);
+      this.statsWarned = true;
+      return;
+    }
+    this.statsWarned = false;
+    for (const r of changed) this.lastStats.set(r.uuid, JSON.stringify([r.name, r.stats]));
+    console.log(`[sink] Statistiken von ${changed.length} Spielern aktualisiert`);
+  }
+
   private async check(q: PromiseLike<{ error: unknown }>) {
     const { error } = await q;
     if (error) throw error;
@@ -247,6 +270,9 @@ export class ConsoleSink implements Sink {
   }
   async loadUnnamed() {
     return { show: false, claims: new Map<string, string>(), hidden: new Set<string>() };
+  }
+  async writeStats(rows: PlayerStatsRow[]) {
+    for (const r of rows) console.log(`[console] Statistik ${r.name}: ${Math.round((r.stats.custom.play_time ?? 0) / 72000)} h, ${r.stats.custom.deaths ?? 0} Tode, ${r.stats.totals.mined} abgebaut`);
   }
   async writeTakes(events: TakeEvent[]) {
     for (const e of events) console.log(`[console] Entnahme: ${e.count}× ${e.item_id} aus ${e.container_id} (${e.owner_label}), ${e.confidence}: ${e.suspects.join(", ")}`);
