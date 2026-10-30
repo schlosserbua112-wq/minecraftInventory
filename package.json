@@ -12,7 +12,8 @@
     "mock": "npm run build -w @mc/core && npm run mock -w @mc/collector",
     "dev:web": "npm run build -w @mc/core && npm run dev -w @mc/web",
     "pi:bundle": "npm run build -w @mc/core && node scripts/pi-bundle.mjs",
-    "live:test": "npm run build -w @mc/core && npm run build -w @mc/collector && node --env-file=apps/collector/.env.testserver apps/collector/dist/index.js"
+    "live:test": "npm run build -w @mc/core && npm run build -w @mc/collector && node --env-file=apps/collector/.env.testserver apps/collector/dist/index.js",
+    "live:gportal": "npm run build -w @mc/core && npm run build -w @mc/collector && node --env-file=apps/collector/.env.gportal apps/collector/dist/index.js"
   },
   "devDependencies": {
     "typescript": "^5.8.3"
