@@ -135,7 +135,8 @@ async function main() {
         await sink.heartbeat(config.mode, "pausiert");
       } else {
         const { players, containers, message, extra } = await source.run(s, sink);
-        const result = aggregate(players, containers, s.unnamedChests);
+        const owners = await sink.loadOwners();
+        const result = aggregate(players, containers, s.unnamedChests, owners);
         await sink.write(players, containers, result, s.historyMinutes);
         await sink.heartbeat(config.mode, message, extra);
         Object.assign(health, { lastRunAt: new Date().toISOString(), lastError: null, rows: result.rows.length, unassigned: result.unassigned.length });

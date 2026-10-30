@@ -6,7 +6,7 @@ import { useData } from "@/lib/data";
 import { createUser, deleteUser, listProfiles, renameUser, setAdmin, setPassword, type Profile } from "@/lib/users";
 
 const DEMO_USERS: Profile[] = ["Valentin", "Max", "Lena"].map((username, i) => ({
-  id: String(i), username, is_admin: i === 0, must_change_password: i === 2, created_at: new Date().toISOString(),
+  id: String(i), username, is_admin: i === 0, must_change_password: i === 2, created_at: new Date().toISOString(), inventory_public: i !== 1, aliases: [],
 }));
 
 export default function UsersPage() {

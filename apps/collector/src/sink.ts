@@ -10,6 +10,8 @@ export interface Sink {
   finishScanRequests(ids: number[], result: string): Promise<void>;
   /** Zonen aus der Verwaltung der Website. */
   loadZones(): Promise<Zone[]>;
+  /** Kontonamen und Aliase, klein geschrieben → Kontoname. */
+  loadOwners(): Promise<Map<string, string>>;
 }
 
 export interface HeartbeatExtra {
@@ -132,6 +134,17 @@ export class SupabaseSink implements Sink {
     return (data ?? []) as Zone[];
   }
 
+  async loadOwners() {
+    const { data, error } = await this.db.from("profiles").select("username, aliases");
+    if (error) throw error;
+    const m = new Map<string, string>();
+    for (const p of (data ?? []) as { username: string; aliases: string[] | null }[]) {
+      m.set(p.username.toLowerCase(), p.username);
+      for (const a of p.aliases ?? []) m.set(a.toLowerCase(), p.username);
+    }
+    return m;
+  }
+
   private async check(q: PromiseLike<{ error: unknown }>) {
     const { error } = await q;
     if (error) throw error;
@@ -153,5 +166,8 @@ export class ConsoleSink implements Sink {
   async loadZones(): Promise<Zone[]> {
     if (process.env.ZONES) return JSON.parse(process.env.ZONES) as Zone[];
     return [{ name: "Test", dimension: "minecraft:overworld", center_x: 0, center_z: 0, radius: 256 }];
+  }
+  async loadOwners() {
+    return new Map<string, string>();
   }
 }

@@ -24,9 +24,20 @@ describe("classifyName", () => {
     expect(classifyName("projekt   Großer Turm", players)).toEqual({ type: "project", key: "großer turm", label: "Großer Turm" });
   });
 
+  it("zählt alles mit Präfix Projekt als Projekt", () => {
+    expect(classifyName("Projektburg", players)).toEqual({ type: "project", key: "burg", label: "burg" });
+    expect(classifyName("Projekt", players)).toEqual({ type: "project", key: "projekt", label: "Projekt" });
+  });
+
+  it("ordnet Aliase dem Konto zu", () => {
+    const owners = new Map([["voisuffvale0810", "Valentin"], ["vale", "Valentin"]]);
+    expect(classifyName("Vale", owners)).toEqual({ type: "player", key: "valentin", label: "Valentin" });
+    const r = aggregate([{ uuid: "u", name: "VoisuffVale0810", online: true, inventory: [{ id: "minecraft:stone", count: 1 }], enderChest: [] }], [], "ignore", owners);
+    expect(r.rows[0]).toMatchObject({ owner_key: "valentin", owner_label: "Valentin" });
+  });
+
   it("markiert Tippfehler als nicht zugeordnet", () => {
     expect(classifyName("Allgmein", players)?.type).toBe("unassigned");
-    expect(classifyName("Projektburg", players)?.type).toBe("unassigned");
     expect(classifyName("Maxx", players)?.type).toBe("unassigned");
   });
 

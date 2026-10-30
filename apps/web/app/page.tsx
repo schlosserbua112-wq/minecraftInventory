@@ -10,7 +10,8 @@ import { useData } from "@/lib/data";
 import { OWNER_COLOR, OWNER_LABEL, SOURCE_LABEL, coords, kindLabel, locations, totals } from "@/lib/derive";
 import { fmt, itemName, matchesItem } from "@/lib/items";
 
-const FILTERS: (OwnerType | "all")[] = ["all", "common", "player", "project", "unassigned"];
+const FILTERS: (OwnerType | "all")[] = ["all", "common", "project", "player", "unassigned"];
+const FILTER_LABEL: Partial<Record<OwnerType, string>> = { player: "Spielerkisten" };
 
 export default function SearchPage() {
   const { snapshot } = useData();
@@ -19,7 +20,11 @@ export default function SearchPage() {
   const [item, setItem] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
 
-  const rows = useMemo(() => (snapshot ? snapshot.stock.filter((r) => filter === "all" || r.owner_type === filter) : []), [snapshot, filter]);
+  // Übersicht zeigt nur Kisten; Inventare und Enderkisten stehen unter "Inventare"
+  const rows = useMemo(
+    () => (snapshot ? snapshot.stock.filter((r) => r.source_kind === "container" && (filter === "all" || r.owner_type === filter)) : []),
+    [snapshot, filter],
+  );
   const results = useMemo(() => totals(rows).filter((t) => matchesItem(t.item_id, query)), [rows, query]);
   const places = useMemo(
     () => (snapshot && item ? locations({ ...snapshot, stock: rows }, item) : []),
@@ -66,7 +71,7 @@ export default function SearchPage() {
           {FILTERS.map((f) => (
             <button key={f} type="button" className="chip" aria-pressed={filter === f} onClick={() => setFilter(f)}>
               {f !== "all" && <span className="dot" style={{ background: OWNER_COLOR[f] }} />}
-              {f === "all" ? "Alles" : OWNER_LABEL[f]}
+              {f === "all" ? "Alle Kisten" : FILTER_LABEL[f] ?? OWNER_LABEL[f]}
             </button>
           ))}
         </div>

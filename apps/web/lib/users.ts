@@ -6,6 +6,10 @@ export interface Profile {
   is_admin: boolean;
   must_change_password: boolean;
   created_at: string;
+  /** Dürfen andere mein Inventar und meine Enderkiste sehen? */
+  inventory_public: boolean;
+  /** Weitere Namen (z. B. Minecraft-Name), unter denen Kisten und Inventar mir gehören. */
+  aliases: string[];
 }
 
 /** Interne Login-Adresse zu einem Benutzernamen (muss zu private.login_email in der Datenbank passen). */
@@ -44,4 +48,6 @@ export const setPassword = (id: string, password: string) => rpc("admin_set_pass
 export const renameUser = (id: string, username: string) => rpc("admin_rename_user", { p_user: id, p_username: username });
 export const setAdmin = (id: string, isAdmin: boolean) => rpc("admin_set_admin", { p_user: id, p_is_admin: isAdmin });
 export const deleteUser = (id: string) => rpc("admin_delete_user", { p_user: id });
+export const updateOwnSettings = (inventoryPublic: boolean, aliases: string[]) =>
+  rpc("update_own_settings", { p_inventory_public: inventoryPublic, p_aliases: aliases });
 export const changeOwnPassword = (oldPw: string, newPw: string) => rpc("change_own_password", { p_old: oldPw, p_new: newPw });

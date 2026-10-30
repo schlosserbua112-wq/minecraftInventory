@@ -31,7 +31,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   return supabaseConfigured ? <LiveProvider>{children}</LiveProvider> : <DemoProvider>{children}</DemoProvider>;
 }
 
-const DEMO_PROFILE: Profile = { id: "demo", username: "Demo", is_admin: true, must_change_password: false, created_at: new Date(0).toISOString() };
+const DEMO_PROFILE: Profile = { id: "demo", username: "Demo", is_admin: true, must_change_password: false, created_at: new Date(0).toISOString(), inventory_public: true, aliases: [] };
 
 function DemoProvider({ children }: { children: ReactNode }) {
   const source = useMemo(() => new DemoSource(), []);

@@ -36,14 +36,26 @@ const UNNAMED_OWNER: Record<Exclude<UnnamedRule, "ignore">, Owner> = {
 };
 
 /** Macht aus Spieler- und Kisten-Snapshots die Zeilen für `stock_items`. */
-export function aggregate(players: PlayerSnapshot[], containers: ContainerSnapshot[], unnamed: UnnamedRule = "ignore"): AggregateResult {
-  const names = players.map((p) => p.name);
+/**
+ * `owners`: Konten mit Aliasen, als Map von Name/Alias (klein geschrieben) auf den Kontonamen.
+ * Ein Spieler, dessen Minecraft-Name ein Alias ist, gehört dann zum Konto.
+ */
+export function aggregate(
+  players: PlayerSnapshot[],
+  containers: ContainerSnapshot[],
+  unnamed: UnnamedRule = "ignore",
+  owners: ReadonlyMap<string, string> = new Map(),
+): AggregateResult {
+  const names = new Map<string, string>();
+  for (const p of players) names.set(p.name.toLowerCase(), owners.get(p.name.toLowerCase()) ?? p.name);
+  for (const [alias, label] of owners) names.set(alias, label);
   const rows: StockRow[] = [];
   const unassigned: ContainerSnapshot[] = [];
-  const owners = new Map<string, Owner>();
+  const byContainer = new Map<string, Owner>();
 
   for (const p of players) {
-    const owner: Owner = { type: "player", key: p.name.toLowerCase(), label: p.name };
+    const label = names.get(p.name.toLowerCase())!;
+    const owner: Owner = { type: "player", key: label.toLowerCase(), label };
     rows.push(...rowsFor("inventory", p.uuid, owner, p.inventory));
     rows.push(...rowsFor("enderchest", p.uuid, owner, p.enderChest));
   }
@@ -52,10 +64,10 @@ export function aggregate(players: PlayerSnapshot[], containers: ContainerSnapsh
     let owner = classifyName(c.customName, names);
     if (!owner && unnamed !== "ignore" && !c.generated && c.items.length) owner = UNNAMED_OWNER[unnamed];
     if (!owner) continue;
-    owners.set(c.id, owner);
+    byContainer.set(c.id, owner);
     if (owner.type === "unassigned" && c.customName) unassigned.push(c);
     rows.push(...rowsFor("container", c.id, owner, c.items));
   }
 
-  return { rows, unassigned, owners };
+  return { rows, unassigned, owners: byContainer };
 }

@@ -35,13 +35,15 @@ export function plainText(raw: unknown): string {
   return "";
 }
 
-const PROJECT_RE = /^projekt\s+(.+)$/i;
+// Alles, was mit "Projekt" beginnt, z. B. "Projekt Burg" oder "ProjektHafen"
+const PROJECT_RE = /^projekt\s*(.*)$/i;
 
 /**
  * Ordnet einen Kistennamen nach den Namensregeln zu.
  * Gibt `null` zurück, wenn die Kiste unbenannt ist und ignoriert wird.
+ * `playerNames`: Spielernamen, oder eine Map von Namen/Aliasen (klein geschrieben) auf den Kontonamen.
  */
-export function classifyName(rawName: unknown, playerNames: Iterable<string>): Owner | null {
+export function classifyName(rawName: unknown, playerNames: Iterable<string> | ReadonlyMap<string, string>): Owner | null {
   const name = plainText(rawName).replace(/\s+/g, " ").trim();
   if (!name) return null;
   const lower = name.toLowerCase();
@@ -50,11 +52,15 @@ export function classifyName(rawName: unknown, playerNames: Iterable<string>): O
 
   const project = PROJECT_RE.exec(name);
   if (project) {
-    const label = project[1].trim();
+    const label = project[1].trim() || "Projekt";
     return { type: "project", key: label.toLowerCase(), label };
   }
 
-  for (const player of playerNames) {
+  if (playerNames instanceof Map) {
+    const label = playerNames.get(lower);
+    return label ? { type: "player", key: label.toLowerCase(), label } : { type: "unassigned", key: lower, label: name };
+  }
+  for (const player of playerNames as Iterable<string>) {
     if (player.toLowerCase() === lower) return { type: "player", key: lower, label: player };
   }
 
