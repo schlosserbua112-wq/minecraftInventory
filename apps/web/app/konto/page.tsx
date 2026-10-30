@@ -45,7 +45,7 @@ export default function AccountPage() {
             <input type="checkbox" checked={visible} onChange={(e) => setVisible(e.target.checked)} style={{ marginTop: 4 }} />
             <span className="grow" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <span>Mein Inventar und meine Enderkiste für alle anzeigen</span>
-              <span className="faint" style={{ fontSize: 13 }}>Ausgeschaltet siehst nur du sie unter „Inventare“. Deine Kisten sind immer für alle sichtbar.</span>
+              <span className="faint" style={{ fontSize: 13 }}>Ausgeschaltet siehst nur du sie unter „Wer hat was?“. Deine Kisten sind immer für alle sichtbar.</span>
             </span>
           </label>
           <label className="field">

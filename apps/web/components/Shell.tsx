@@ -11,9 +11,7 @@ import { PasswordForm } from "./PasswordForm";
 
 const NAV = [
   { href: "/", label: "Suche" },
-  { href: "/inventare", label: "Inventare" },
-  { href: "/allgemein", label: "Allgemein" },
-  { href: "/projekte", label: "Projekte" },
+  { href: "/inventare", label: "Wer hat was?" },
   { href: "/verlauf", label: "Verlauf" },
   { href: "/verwaltung", label: "Verwaltung" },
 ];

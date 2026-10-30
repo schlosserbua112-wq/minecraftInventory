@@ -1,5 +1,5 @@
 import { aggregate, createMockWorld, rng, type MockWorld } from "@mc/core";
-import type { Actions, HistoryRow, Snapshot } from "./types";
+import type { Actions, Dashboard, HistoryRow, Snapshot } from "./types";
 
 /** Beispieldaten im Browser: dieselbe Mock-Welt wie der Mock-Sammler, nur ohne Supabase. */
 export class DemoSource {
@@ -9,27 +9,12 @@ export class DemoSource {
       { id: 1, name: "Hauptbasis", dimension: "minecraft:overworld", center_x: 0, center_z: 0, radius: 400, is_main: true },
       { id: 2, name: "Außenposten Mesa", dimension: "minecraft:overworld", center_x: 900, center_z: -650, radius: 120, is_main: false },
     ],
-    projects: [
-      { key: "burg", label: "Burg" },
-      { key: "hafen", label: "Hafen" },
-      { key: "bahnhof", label: "Bahnhof" },
-    ],
-    goals: [
-      { project_key: "burg", item_id: "minecraft:stone_bricks", target: 3000 },
-      { project_key: "burg", item_id: "minecraft:glass", target: 800 },
-      { project_key: "burg", item_id: "minecraft:oak_log", target: 400 },
-      { project_key: "hafen", item_id: "minecraft:oak_log", target: 1000 },
-      { project_key: "hafen", item_id: "minecraft:spruce_planks", target: 600 },
-    ],
-    tasks: [
-      { id: 1, project_key: "burg", title: "Steinziegel brennen", assignee: "Max", status: "in_progress", position: 0 },
-      { id: 2, project_key: "burg", title: "Fundament abstecken", assignee: "Vale", status: "done", position: 0 },
-      { id: 3, project_key: "burg", title: "Glas schmelzen", assignee: null, status: "todo", position: 0 },
-      { id: 4, project_key: "hafen", title: "Fichten fällen", assignee: "Lena", status: "todo", position: 0 },
-      { id: 5, project_key: "hafen", title: "Steg Variante 1", assignee: "Jonas", status: "cancelled", position: 0 },
-    ],
     scans: [],
   };
+  private dashboards: Dashboard[] = [
+    { id: 1, name: "Baumaterial", items: ["minecraft:stone_bricks", "minecraft:oak_log", "minecraft:glass"], days: 14, position: 0 },
+    { id: 2, name: "Erze", items: ["minecraft:diamond", "minecraft:iron_ingot", "minecraft:gold_ingot"], days: 30, position: 1 },
+  ];
   private nextId = 100;
   private showUnnamed = true;
   /** „Meine“-Markierungen im Demo-Modus, Kisten-ID → Kontoname */
@@ -101,38 +86,6 @@ export class DemoSource {
       this.base.zones = this.base.zones.filter((z) => z.id !== id);
       this.emit();
     },
-    addProject: async (label) => {
-      const key = label.trim().toLowerCase();
-      if (!this.base.projects.some((p) => p.key === key)) this.base.projects.push({ key, label: label.trim() });
-      this.emit();
-      return key;
-    },
-    setGoals: async (projectKey, goals, mode) => {
-      if (mode === "replace") this.base.goals = this.base.goals.filter((g) => g.project_key !== projectKey);
-      for (const g of goals) {
-        const existing = this.base.goals.find((x) => x.project_key === projectKey && x.item_id === g.item_id);
-        if (existing) existing.target = mode === "add" ? existing.target + g.target : g.target;
-        else this.base.goals.push({ project_key: projectKey, ...g });
-      }
-      this.emit();
-    },
-    removeGoal: async (projectKey, itemId) => {
-      this.base.goals = this.base.goals.filter((g) => !(g.project_key === projectKey && g.item_id === itemId));
-      this.emit();
-    },
-    addTask: async (t) => {
-      this.base.tasks.push({ ...t, id: this.nextId++, position: this.base.tasks.length });
-      this.emit();
-    },
-    updateTask: async (id, patch) => {
-      const t = this.base.tasks.find((x) => x.id === id);
-      if (t) Object.assign(t, patch);
-      this.emit();
-    },
-    removeTask: async (id) => {
-      this.base.tasks = this.base.tasks.filter((t) => t.id !== id);
-      this.emit();
-    },
     loadHistory: async (itemId, days) => {
       // Rückwärts gerechneter Zufallsverlauf, der beim heutigen Stand endet
       const now = this.snapshot().stock.filter((r) => r.item_id === itemId).reduce((n, r) => n + r.count, 0);
@@ -145,6 +98,15 @@ export class DemoSource {
         value -= (r() - 0.35) * Math.max(now, 50) * 0.04;
       }
       return rows;
+    },
+    listDashboards: async () => structuredClone(this.dashboards),
+    saveDashboard: async ({ id, ...d }) => {
+      const saved = { ...d, id: id ?? this.nextId++ };
+      this.dashboards = id === undefined ? [...this.dashboards, saved] : this.dashboards.map((x) => (x.id === id ? saved : x));
+      return structuredClone(saved);
+    },
+    deleteDashboard: async (id) => {
+      this.dashboards = this.dashboards.filter((x) => x.id !== id);
     },
     claimContainer: async (id, mine) => {
       if (mine) this.claims.set(id, "Demo");
