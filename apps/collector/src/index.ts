@@ -4,7 +4,7 @@ import { startHealthServer, type HealthState } from "./health.js";
 import { LiveCollector } from "./live.js";
 import { LocalMapStore, SupabaseMapStore, type MapStore } from "./mapstore.js";
 import { defaultSettings, SettingsStore, type Settings } from "./settings.js";
-import { ConsoleSink, SupabaseSink, type HeartbeatExtra, type Sink, type UnnamedState } from "./sink.js";
+import { ConsoleSink, SupabaseSink, type HeartbeatExtra, type ScanRequest, type Sink, type UnnamedState } from "./sink.js";
 import { worldFiles } from "./worldfiles.js";
 
 const config = loadConfig();
@@ -52,7 +52,7 @@ function mockSource(): Source {
     async run(s, sink) {
       world.tick();
       const scans = await sink.takeScanRequests();
-      await sink.finishScanRequests(scans, "Mock: keine neuen Kisten gefunden");
+      await sink.finishScanRequests(scans.map((r) => r.id), "Mock: keine neuen Kisten gefunden");
       return applySources(world.players, world.containers, s.sources);
     },
     close() {},
@@ -74,14 +74,17 @@ function liveSource(): Source {
   let firstZoneScan: Promise<void> | null = null;
   let zoneScanDone = () => {};
 
-  async function scan(sink: Sink, s: Settings, scans: number[], full: boolean, map: boolean | "if-missing") {
+  async function scan(sink: Sink, s: Settings, scans: ScanRequest[], full: boolean, map: boolean | "if-missing") {
+    // Kartenanfragen gelten erst nach dem Zeichnen als erledigt
+    const mapIds = scans.filter((r) => r.kind === "map").map((r) => r.id);
+    const scanIds = scans.filter((r) => r.kind !== "map").map((r) => r.id);
     const zones = await sink.loadZones();
     const parts: string[] = [];
     const t = Date.now();
     const found = await live.zoneScan(zones, s, scans.length > 0);
     lastZoneScan = Date.now();
     parts.push(`Zonen-Scan: ${found} neue Kisten (${Math.round((Date.now() - t) / 1000)} s)`);
-    await sink.finishScanRequests(scans, `${found} neue Kisten gefunden`);
+    await sink.finishScanRequests(scanIds, `${found} neue Kisten gefunden`);
     zoneScanDone();
     if (full) {
       const t2 = Date.now();
@@ -93,10 +96,15 @@ function liveSource(): Source {
       try {
         const { regions, uploaded } = await live.renderMap(mapStore);
         parts.push(`Karte: ${regions} Regionen, ${uploaded} neu (${Math.round((Date.now() - t3) / 1000)} s)`);
+        await sink.finishScanRequests(mapIds, `Karte neu gezeichnet: ${regions} Regionen, ${uploaded} geändert`);
       } catch (err) {
         // Eine kaputte Karte darf den Kisten-Scan nicht als fehlgeschlagen melden
-        parts.push(`Karte fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`);
+        const msg = `Karte fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`;
+        parts.push(msg);
+        await sink.finishScanRequests(mapIds, msg);
       }
+    } else {
+      await sink.finishScanRequests(mapIds, "Karte ist in den Einstellungen des Pi ausgeschaltet");
     }
     scanMessage = parts.join(" · ");
     console.log(`[live] ${scanMessage}`);
@@ -108,7 +116,8 @@ function liveSource(): Source {
         const zoneDue = firstRun || Date.now() - lastZoneScan >= s.zoneScanMinutes * 60_000;
         const scans = await sink.takeScanRequests();
         const full = firstRun ? s.sources.fullScan : live.fullScanDue(s);
-        const map = firstRun ? (s.sources.map ? "if-missing" : false) : live.mapDue(s);
+        const mapRequested = s.sources.map && scans.some((r) => r.kind === "map");
+        const map = mapRequested || (firstRun ? (s.sources.map ? "if-missing" : false) : live.mapDue(s));
         if (zoneDue || scans.length || full || map) {
           if (firstRun) firstZoneScan = new Promise((resolve) => { zoneScanDone = resolve; });
           firstRun = false;
@@ -117,6 +126,8 @@ function liveSource(): Source {
               scanMessage = `Scan fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`;
               console.error(`[live] ${scanMessage}`);
               lastZoneScan = Date.now(); // nicht in jeder Runde neu versuchen
+              // Sonst bleiben die Anfragen auf der Website ewig "läuft"
+              return sink.finishScanRequests(scans.map((r) => r.id), scanMessage).catch(() => {});
             })
             .finally(() => {
               zoneScanDone();

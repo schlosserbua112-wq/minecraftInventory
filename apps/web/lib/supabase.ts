@@ -24,6 +24,13 @@ async function all<T>(table: string, columns = "*"): Promise<T[]> {
   }
 }
 
+async function loadScans() {
+  const recent = (cols: string) => supabase().from("scan_requests").select(cols).order("requested_at", { ascending: false }).limit(5);
+  const res = await recent("id, requested_at, finished_at, result, kind");
+  // Spalte "kind" fehlt noch (SQL nicht ausgeführt): ohne sie laden
+  return res.error?.code === "42703" ? recent("id, requested_at, finished_at, result") : res;
+}
+
 export async function loadSnapshot(): Promise<Snapshot> {
   const [players, containers, stock, zones, status, scans, settings, hidden, landmarks] = await Promise.all([
     all<Snapshot["players"][number]>("players", "uuid, name, online, last_seen"),
@@ -31,7 +38,7 @@ export async function loadSnapshot(): Promise<Snapshot> {
     all<StockRow>("stock_items", "source_kind, source_id, owner_type, owner_key, owner_label, item_id, count"),
     all<Snapshot["zones"][number]>("zones"),
     all<NonNullable<Snapshot["status"]>>("collector_status", "heartbeat_at, mode, message"),
-    supabase().from("scan_requests").select("id, requested_at, finished_at, result").order("requested_at", { ascending: false }).limit(5),
+    loadScans(),
     // Fehlt die Tabelle noch (SQL nicht ausgeführt), bleibt der Schalter einfach aus
     supabase().from("app_settings").select("show_unnamed").eq("id", 1).maybeSingle(),
     supabase().from("container_hidden").select("container_id"),
@@ -39,7 +46,7 @@ export async function loadSnapshot(): Promise<Snapshot> {
     supabase().from("landmarks").select("id, name, color, x, z, created_by").order("name"),
   ]);
   return {
-    players, containers, stock, zones, landmarks: landmarks.data ?? [], status: status[0] ?? null, scans: scans.data ?? [],
+    players, containers, stock, zones, landmarks: landmarks.data ?? [], status: status[0] ?? null, scans: (scans.data ?? []) as unknown as Snapshot["scans"],
     showUnnamed: Boolean(settings.data?.show_unnamed),
     hidden: (hidden.data ?? []).map((r) => r.container_id as string),
   };
@@ -99,7 +106,13 @@ export function supabaseActions(refresh: () => void): Actions {
     refresh();
   };
   return {
-    requestScan: () => after(db().from("scan_requests").insert({})),
+    requestScan: async (kind = "scan") => {
+      const { error } = await db().from("scan_requests").insert(kind === "map" ? { kind } : {});
+      if (error?.code === "42703" || error?.code === "PGRST204") throw new Error("Die Spalte für Kartenanfragen fehlt noch. Das SQL dafür muss einmal in Supabase laufen.");
+      if (error?.code === "42501") throw new Error("Nur Admins dürfen die Karte neu zeichnen lassen.");
+      if (error) throw error;
+      refresh();
+    },
     addZone: (z) => after(db().from("zones").insert(z)),
     removeZone: (id) => after(db().from("zones").delete().eq("id", id)),
     addLandmark: async (l) => {
