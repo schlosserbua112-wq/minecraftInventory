@@ -5,3 +5,4 @@ export * from "./region.js";
 export * from "./aggregate.js";
 export * from "./format.js";
 export * from "./mock.js";
+export * from "./materials.js";
