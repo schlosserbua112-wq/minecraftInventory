@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { StockRow } from "@mc/core";
-import type { Actions, Dashboard, HistoryRow, Snapshot } from "./types";
+import type { Actions, Project, Snapshot } from "./types";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -62,11 +62,25 @@ async function ok(q: PromiseLike<{ error: unknown }>) {
   if (error) throw error;
 }
 
-const DASH_COLS = "id, name, items, days, position";
+const PROJECT_COLS = "id, name, created_by, build_project_items(item_id, quantity, added_at), build_project_sources(container_id, owner_key)";
 
-/** Fehlt die Tabelle noch, sagt die Meldung, was zu tun ist. */
-function dashError(e: { code?: string; message: string }) {
-  return e.code === "42P01" || e.code === "PGRST205" ? "Die Tabelle für Dashboards fehlt noch. Das SQL dafür muss einmal in Supabase laufen." : e.message;
+/** Fehlt die Tabelle noch, sagt die Meldung, was zu tun ist; RLS-Fehler werden verständlich. */
+function projectError(e: { code?: string; message: string }) {
+  if (e.code === "42P01" || e.code === "PGRST205" || e.code === "PGRST200") return new Error("Die Tabellen für Projekte fehlen noch. Das SQL dafür muss einmal in Supabase laufen.");
+  if (e.code === "42501") return new Error("Das darfst du nicht. Löschen kann nur, wer das Projekt angelegt hat, oder ein Admin.");
+  return new Error(e.message);
+}
+async function projectOk(q: PromiseLike<{ error: { code?: string; message: string } | null }>) {
+  const { error } = await q;
+  if (error) throw projectError(error);
+}
+
+interface ProjectRecord {
+  id: number;
+  name: string;
+  created_by: string | null;
+  build_project_items: { item_id: string; quantity: number; added_at: string }[];
+  build_project_sources: { container_id: string | null; owner_key: string | null }[];
 }
 
 /** Fehlt die Tabelle noch, sagt die Meldung, was zu tun ist; RLS-Fehler werden verständlich. */
@@ -103,31 +117,52 @@ export function supabaseActions(refresh: () => void): Actions {
       await landmarkOk(Promise.resolve({ error: error ?? (data?.length ? null : { code: "42501", message: "" }) }));
       refresh();
     },
-    loadHistory: async (itemId, days) => {
-      const since = new Date(Date.now() - days * 86400_000).toISOString();
-      const { data, error } = await db()
-        .from("stock_history")
-        .select("taken_at, owner_type, owner_key, item_id, count")
-        .eq("item_id", itemId)
-        .gte("taken_at", since)
-        .order("taken_at");
-      if (error) throw error;
-      return (data ?? []) as HistoryRow[];
+    listProjects: async () => {
+      const { data, error } = await db().from("build_projects").select(PROJECT_COLS).order("created_at").order("id");
+      if (error) throw projectError(error);
+      return ((data ?? []) as unknown as ProjectRecord[]).map(
+        (p): Project => ({
+          id: p.id,
+          name: p.name,
+          created_by: p.created_by,
+          items: [...p.build_project_items].sort((a, b) => a.added_at.localeCompare(b.added_at)).map(({ item_id, quantity }) => ({ item_id, quantity })),
+          containers: p.build_project_sources.flatMap((s) => (s.container_id ? [s.container_id] : [])),
+          owners: p.build_project_sources.flatMap((s) => (s.owner_key ? [s.owner_key] : [])),
+        }),
+      );
     },
-    listDashboards: async () => {
-      const { data, error } = await db().from("history_dashboards").select(DASH_COLS).order("position").order("id");
-      if (error) throw new Error(dashError(error));
-      return (data ?? []) as Dashboard[];
+    subscribeProjects: (onChange) => {
+      const channel = db().channel("projects");
+      for (const table of ["build_projects", "build_project_items", "build_project_sources"]) {
+        channel.on("postgres_changes", { event: "*", schema: "public", table }, onChange);
+      }
+      channel.subscribe();
+      return () => {
+        db().removeChannel(channel);
+      };
     },
-    saveDashboard: async ({ id, ...d }) => {
-      const q = id === undefined ? db().from("history_dashboards").insert(d) : db().from("history_dashboards").update(d).eq("id", id);
-      const { data, error } = await q.select(DASH_COLS).single();
-      if (error) throw new Error(dashError(error));
-      return data as Dashboard;
+    createProject: async (name) => {
+      const { data, error } = await db().from("build_projects").insert({ name }).select("id").single();
+      if (error) throw projectError(error);
+      return (data as { id: number }).id;
     },
-    deleteDashboard: async (id) => {
-      const { error } = await db().from("history_dashboards").delete().eq("id", id);
-      if (error) throw new Error(dashError(error));
+    renameProject: (id, name) => projectOk(db().from("build_projects").update({ name }).eq("id", id)),
+    deleteProject: async (id) => {
+      // Ohne Recht liefert ein Delete einfach 0 Zeilen, deshalb die Zeile zurückverlangen
+      const { data, error } = await db().from("build_projects").delete().eq("id", id).select("id");
+      if (error || !data?.length) throw projectError(error ?? { code: "42501", message: "" });
+    },
+    setProjectItem: (id, itemId, quantity) =>
+      projectOk(
+        quantity > 0
+          ? db().from("build_project_items").upsert({ project_id: id, item_id: itemId, quantity }, { onConflict: "project_id,item_id", ignoreDuplicates: false })
+          : db().from("build_project_items").delete().eq("project_id", id).eq("item_id", itemId),
+      ),
+    setProjectSource: async (id, source, on) => {
+      const [col, value] = "container" in source ? (["container_id", source.container] as const) : (["owner_key", source.owner] as const);
+      if (!on) return projectOk(db().from("build_project_sources").delete().eq("project_id", id).eq(col, value));
+      const { error } = await db().from("build_project_sources").insert({ project_id: id, [col]: value });
+      if (error && error.code !== "23505") throw projectError(error); // schon dabei
     },
     claimContainer: async (id, mine) => {
       const { error } = await db().rpc("claim_container", { p_container: id, p_mine: mine });

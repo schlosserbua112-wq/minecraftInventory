@@ -1,5 +1,5 @@
-import { aggregate, createMockWorld, rng, type MockWorld } from "@mc/core";
-import type { Actions, Dashboard, HistoryRow, Snapshot } from "./types";
+import { aggregate, createMockWorld, type MockWorld } from "@mc/core";
+import type { Actions, Project, Snapshot } from "./types";
 
 /** Beispieldaten im Browser: dieselbe Mock-Welt wie der Mock-Sammler, nur ohne Supabase. */
 export class DemoSource {
@@ -16,10 +16,22 @@ export class DemoSource {
     ],
     scans: [],
   };
-  private dashboards: Dashboard[] = [
-    { id: 1, name: "Baumaterial", items: ["minecraft:stone_bricks", "minecraft:oak_log", "minecraft:glass"], days: 14, position: 0 },
-    { id: 2, name: "Erze", items: ["minecraft:diamond", "minecraft:iron_ingot", "minecraft:gold_ingot"], days: 30, position: 1 },
+  private projects: Project[] = [
+    {
+      id: 1,
+      name: "Burg am Hang",
+      created_by: "demo",
+      items: [
+        { item_id: "minecraft:stone_bricks", quantity: 2000 },
+        { item_id: "minecraft:spruce_planks", quantity: 640 },
+        { item_id: "minecraft:glass", quantity: 256 },
+        { item_id: "minecraft:iron_bars", quantity: 96 },
+      ],
+      containers: [],
+      owners: [],
+    },
   ];
+  private projectListeners = new Set<() => void>();
   private nextId = 100;
   private showUnnamed = true;
   /** „Meine“-Markierungen im Demo-Modus, Kisten-ID → Kontoname */
@@ -44,6 +56,14 @@ export class DemoSource {
   subscribe(fn: () => void) {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
+  }
+  private editProject(id: number, fn: (p: Project) => void) {
+    const p = this.projects.find((x) => x.id === id);
+    if (p) fn(p);
+    this.projectsChanged();
+  }
+  private projectsChanged() {
+    for (const fn of this.projectListeners) fn();
   }
   private emit() {
     for (const fn of this.listeners) fn();
@@ -106,28 +126,35 @@ export class DemoSource {
       this.base.landmarks = this.base.landmarks.filter((x) => x.id !== id);
       this.emit();
     },
-    loadHistory: async (itemId, days) => {
-      // Rückwärts gerechneter Zufallsverlauf, der beim heutigen Stand endet
-      const now = this.snapshot().stock.filter((r) => r.item_id === itemId).reduce((n, r) => n + r.count, 0);
-      const r = rng(itemId.length * 97 + days);
-      const rows: HistoryRow[] = [];
-      let value = now;
-      for (let d = 0; d < days * 4; d++) {
-        const t = new Date(Date.now() - d * 6 * 3600_000);
-        rows.unshift({ taken_at: t.toISOString(), owner_type: "common", owner_key: "allgemein", item_id: itemId, count: Math.max(Math.round(value), 0) });
-        value -= (r() - 0.35) * Math.max(now, 50) * 0.04;
-      }
-      return rows;
+    listProjects: async () => structuredClone(this.projects),
+    subscribeProjects: (fn) => {
+      this.projectListeners.add(fn);
+      return () => this.projectListeners.delete(fn);
     },
-    listDashboards: async () => structuredClone(this.dashboards),
-    saveDashboard: async ({ id, ...d }) => {
-      const saved = { ...d, id: id ?? this.nextId++ };
-      this.dashboards = id === undefined ? [...this.dashboards, saved] : this.dashboards.map((x) => (x.id === id ? saved : x));
-      return structuredClone(saved);
+    createProject: async (name) => {
+      const id = this.nextId++;
+      this.projects.push({ id, name, created_by: "demo", items: [], containers: [], owners: [] });
+      this.projectsChanged();
+      return id;
     },
-    deleteDashboard: async (id) => {
-      this.dashboards = this.dashboards.filter((x) => x.id !== id);
+    renameProject: async (id, name) => this.editProject(id, (p) => (p.name = name)),
+    deleteProject: async (id) => {
+      this.projects = this.projects.filter((p) => p.id !== id);
+      this.projectsChanged();
     },
+    setProjectItem: async (id, itemId, quantity) =>
+      this.editProject(id, (p) => {
+        const i = p.items.findIndex((x) => x.item_id === itemId);
+        if (quantity <= 0) p.items = p.items.filter((x) => x.item_id !== itemId);
+        else if (i >= 0) p.items[i] = { item_id: itemId, quantity };
+        else p.items.push({ item_id: itemId, quantity });
+      }),
+    setProjectSource: async (id, source, on) =>
+      this.editProject(id, (p) => {
+        const [key, value] = "container" in source ? (["containers", source.container] as const) : (["owners", source.owner] as const);
+        p[key] = p[key].filter((x) => x !== value);
+        if (on) p[key].push(value);
+      }),
     claimContainer: async (id, mine) => {
       if (mine) this.claims.set(id, "Demo");
       else this.claims.delete(id);
