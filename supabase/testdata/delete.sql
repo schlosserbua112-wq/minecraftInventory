@@ -19,3 +19,10 @@ delete from public.stock_history h
 drop table private.testdata;
 
 commit;
+
+-- Kontrolle: Es sollten nur noch echte Spieler und Kisten übrig sein
+select (select count(*) from public.players where uuid::text like '00000000-0000-4000-8000-%') as test_spieler_uebrig,
+       (select count(*) from public.players) as spieler,
+       (select count(*) from public.containers) as kisten,
+       (select count(*) from public.projects) as projekte,
+       (select count(*) from public.profiles) as benutzer;
