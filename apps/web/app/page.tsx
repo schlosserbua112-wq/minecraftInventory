@@ -11,7 +11,7 @@ import { fmt, itemName, matchesItem } from "@/lib/items";
 import { byOwner, colorOf, placesOf, scopeRows, useOwners, useStoredKeys, type Owner, type Scope } from "@/lib/search";
 import { useItemNames } from "@/lib/itemicons";
 
-const TYPES: (OwnerType | "all")[] = ["all", "common", "project", "player", "unassigned"];
+const TYPES: (OwnerType | "all")[] = ["all", "player", "unassigned"];
 const TYPE_LABEL: Partial<Record<OwnerType | "all", string>> = { all: "Alles", player: "Spieler" };
 /** Spalten der Tabelle bei "Alle Items" ohne Besitzfilter */
 const TYPE_COLS: OwnerType[] = ["common", "player", "project"];
