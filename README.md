@@ -34,6 +34,10 @@ npm run mock        # Mock-Sammler (ohne .env nur Konsole)
 4. Website (Vercel): URL und öffentlicher Key stehen in `apps/web/.env.production`.
 5. Pi: `SUPABASE_URL` und `SUPABASE_SERVICE_ROLE_KEY` in `/etc/minecraft-tracker.env` (Rechte 600). Der Schreib-Key bleibt nur auf dem Pi.
 
+## Original-Item-Icons
+
+Die Texturen gehören Mojang und liegen deshalb nicht im Repo. `node scripts/item-icons.mjs` liest sie aus dem eigenen Minecraft-Client (neueste Jar unter `%APPDATA%\.minecraft\versions`, oder Pfad als Argument) und lädt sie nach einer Admin-Anmeldung als `icons.json` in den privaten Bucket `items` (Migration `20261030000800_item_icons_bucket.sql`). Nur angemeldete Freunde können sie laden. Ohne Datei zeigt die Website die farbigen Ersatzsymbole. Mit `--nur-datei` entsteht nur `item-icons.json`; nach `apps/web/public/` kopiert, nutzt sie auch der Demo-Modus.
+
 ## Auf den Pi bringen
 
 ```powershell

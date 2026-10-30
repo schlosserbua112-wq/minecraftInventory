@@ -12,3 +12,5 @@ next-env.d.ts
 !*.env.example
 settings.*.json
 map-out/
+apps/web/public/item-icons.json
+item-icons.json
