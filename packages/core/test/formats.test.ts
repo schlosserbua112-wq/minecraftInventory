@@ -19,6 +19,14 @@ describe("SNBT", () => {
     expect(snbtFromDataGet(`1, 64, 2 has the following block data: {id: "minecraft:chest"}`)).toEqual({ id: "minecraft:chest" });
     expect(snbtFromDataGet("No block entity at 1, 2, 3")).toBeNull();
   });
+  it("ignoriert vorangestellte Ausgaben früherer Befehle", () => {
+    // So am G-Portal-Server gesehen, wenn zwei RCON-Verbindungen gleichzeitig abfragen
+    const res = `Vale has the following entity data: {head: {count: 1, id: "minecraft:iron_helmet"}}Tomsen04 has the following entity data: [{count: 2, Slot: 0b, id: "minecraft:dirt"}]`;
+    expect(snbtFromDataGet(res)).toEqual([{ count: 2, Slot: 0, id: "minecraft:dirt" }]);
+    expect(snbtFromDataGet(res, "Tomsen04")).toEqual([{ count: 2, Slot: 0, id: "minecraft:dirt" }]);
+    expect(snbtFromDataGet(`Tomsen04 has the following entity data: []`, "Vale")).toBeNull();
+    expect(snbtFromDataGet(`1, 2, 3 has the following block data: {a: 1}4, 64, 5 has the following block data: {b: 2}`, "4, 64, 5")).toEqual({ b: 2 });
+  });
 });
 
 describe("NBT und Region", () => {
