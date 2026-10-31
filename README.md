@@ -50,6 +50,10 @@ Die Texturen gehören Mojang und liegen deshalb nicht im Repo. `node scripts/ite
 
 ## Auf den Pi bringen
 
+Automatisch: Nach jedem Merge auf `main`, der den Sammler betrifft, baut GitHub Actions das Bundle (`.github/workflows/pi-bundle.yml`) und legt es auf den Branch `pi-deploy`. Der Pi schaut alle 2 Minuten nach und spielt ein neues Bundle selbst ein. Einrichtung einmalig, siehe `deploy/pi/autodeploy/README.md`.
+
+Von Hand (geht weiterhin):
+
 ```powershell
 npm install
 npm run pi:bundle   # erzeugt dist\pi\minecraft-tracker (Sammler als eine Datei + Compose)

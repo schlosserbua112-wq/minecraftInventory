@@ -1,0 +1,63 @@
+# Baut nach jedem Merge auf main den Sammler für den Pi und legt das Ergebnis
+# auf den Branch "pi-deploy". Der Pi holt sich diesen Branch selbst ab
+# (deploy/pi/autodeploy) und startet den Container neu. Kein Zugang zum Pi nötig.
+name: Pi-Bundle
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/collector/**"
+      - "packages/core/**"
+      - "deploy/pi/minecraft-tracker/**"
+      - "scripts/pi-bundle.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/pi-bundle.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pi-bundle
+  cancel-in-progress: false
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: npm run typecheck -w @mc/collector
+      - run: npm run pi:bundle
+
+      - name: Auf Branch pi-deploy veröffentlichen
+        env:
+          SRC_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/pi-deploy"
+          rm -rf "$out"
+          git clone --quiet --no-checkout "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "$out"
+          cd "$out"
+          if git ls-remote --exit-code --heads origin pi-deploy >/dev/null; then
+            git checkout --quiet pi-deploy
+          else
+            git checkout --quiet --orphan pi-deploy
+          fi
+          git rm -rq --ignore-unmatch . || true
+          cp -r "$GITHUB_WORKSPACE/dist/pi/minecraft-tracker" ./minecraft-tracker
+          echo "$SRC_SHA" > ./minecraft-tracker/SOURCE_COMMIT
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet -m "Pi-Bundle aus ${SRC_SHA:0:7}" || { echo "Keine Änderung am Bundle"; exit 0; }
+          git push --quiet origin pi-deploy
+          echo "Veröffentlicht: pi-deploy <- ${SRC_SHA:0:7}"
