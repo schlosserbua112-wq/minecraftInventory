@@ -1,0 +1,37 @@
+# Minecraft-Ressourcen-Tracker: Sammler auf dem Raspberry Pi.
+# Eigener Ordner /opt/apps/minecraft-tracker, eigener Container, eigene Kachel im pi-dashboard.
+# Entfernen: cd /opt/apps/minecraft-tracker && docker compose down -v --rmi all && cd .. && rm -rf minecraft-tracker
+services:
+  collector:
+    build: .
+    image: minecraft-tracker:latest
+    container_name: minecraft-tracker
+    restart: unless-stopped
+    ports:
+      - "8101:8080"
+    env_file:
+      - path: /etc/minecraft-tracker.env   # Geheimnisse außerhalb des App-Ordners, Rechte 600
+        required: false                    # ohne Datei: Mock-Modus, nur Konsole
+    environment:
+      HTTP_PORT: "8080"
+      SETTINGS_FILE: /data/settings.json
+      TZ: Europe/Berlin                    # Vollscan-/Karten-Uhrzeit in deutscher Zeit
+      SITE_URL: https://minecraft-tracker-eight.vercel.app   # Link „Zur Website“ auf der Kachel
+    volumes:
+      - settings:/data                     # Einstellungen der Kachel überleben Updates
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m                      # Region-Dateien nur im RAM
+    cpus: "0.25"                           # höchstens 25 % CPU
+    cpu_shares: 256                        # niedrige Priorität gegenüber anderen Containern
+    mem_limit: 150m                        # Hinweis: auf diesem Pi wirkungslos (cgroup_disable=memory)
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"                      # zusammen max. 10 MB
+    labels:
+      dashboard.name: "Minecraft-Ressourcen"
+      dashboard.description: "Sammelt Inventare und Kisten vom Minecraft-Server; Einstellungen auf der Kachel"
+volumes:
+  settings:
