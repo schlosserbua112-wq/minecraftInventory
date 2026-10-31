@@ -101,6 +101,13 @@ h2 { font-size: 16px; }
 table.compare th, table.compare td { padding: 8px 8px; }
 table.compare th:first-child, table.compare td:first-child { padding-left: 0; }
 table.compare th:last-child, table.compare td:last-child { padding-right: 0; }
+table.compare th, table.compare td { white-space: nowrap; }
+/* Item-Spalte bleibt beim waagrechten Scrollen stehen */
+table.compare th:first-child, table.compare td:first-child { position: sticky; left: 0; z-index: 1; background: var(--panel); padding-right: 12px; }
+table.compare.dense th, table.compare.dense td { padding-left: 6px; padding-right: 6px; }
+table.compare.dense th:first-child, table.compare.dense td:first-child { padding-left: 0; padding-right: 10px; }
+table.compare.dense th:last-child, table.compare.dense td:last-child { padding-right: 0; }
+table.compare.dense .badge { gap: 4px; font-size: 11px; }
 table.compare tbody tr { cursor: pointer; }
 table.compare tbody tr:hover td { background: var(--raised); }
 table.compare .strong { font-weight: 600; }
