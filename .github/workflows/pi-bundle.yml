@@ -36,8 +36,8 @@ jobs:
 
       - run: npm ci --no-audit --no-fund
       - run: npm test
+      - run: npm run pi:bundle   # baut auch @mc/core, das der Typecheck braucht
       - run: npm run typecheck -w @mc/collector
-      - run: npm run pi:bundle
 
       - name: Auf Branch pi-deploy veröffentlichen
         env:
