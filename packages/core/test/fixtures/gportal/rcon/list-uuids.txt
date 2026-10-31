@@ -1,2 +1,0 @@
-list uuids
-There are 4 of a max of 9 players online: Tomsen04 (3c590e64-cb66-4b11-a683-9570bdbcd1fa), HiaxxxX (075caf45-59d3-459d-baa8-845c90ae17e3), Luggei (0f5b6d49-ac82-43da-b729-b3f1301b7e00), VoisuffVale0810 (be6a62d9-5a99-4429-9e1b-0933842be448)
