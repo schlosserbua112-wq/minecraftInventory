@@ -45,19 +45,16 @@ jobs:
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/pi-deploy"
-          rm -rf "$out"
-          git clone --quiet --no-checkout "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" "$out"
+          rm -rf "$out" && mkdir -p "$out"
+          cp -r dist/pi/minecraft-tracker "$out/minecraft-tracker"
+          echo "$SRC_SHA" > "$out/minecraft-tracker/SOURCE_COMMIT"
           cd "$out"
-          if git ls-remote --exit-code --heads origin pi-deploy >/dev/null; then
-            git checkout --quiet pi-deploy
-          else
-            git checkout --quiet --orphan pi-deploy
-          fi
-          git rm -rq --ignore-unmatch . || true
-          cp -r "$GITHUB_WORKSPACE/dist/pi/minecraft-tracker" ./minecraft-tracker
-          echo "$SRC_SHA" > ./minecraft-tracker/SOURCE_COMMIT
+          # Branch enthält nur den Ordner minecraft-tracker; vorheriger Stand wird Elternteil.
+          git init -q -b pi-deploy
+          git remote add origin "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git"
+          if git fetch -q --depth 1 origin pi-deploy; then git reset -q --soft FETCH_HEAD; fi
           git add -A
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit --quiet -m "Pi-Bundle aus ${SRC_SHA:0:7}" || { echo "Keine Änderung am Bundle"; exit 0; }
-          git push --quiet origin pi-deploy
+            commit -q -m "Pi-Bundle aus ${SRC_SHA:0:7}"
+          git push -q origin pi-deploy
           echo "Veröffentlicht: pi-deploy <- ${SRC_SHA:0:7}"
