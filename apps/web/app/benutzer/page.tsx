@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Loading } from "@/components/Loading";
+import { PlayerColorPicker } from "@/components/PlayerColorPicker";
+import { PLAYER_COLORS, fallbackColor } from "@/lib/search";
 import { useData } from "@/lib/data";
-import { createUser, deleteUser, listProfiles, renameUser, setAdmin, setPassword, type Profile } from "@/lib/users";
+import { createUser, deleteUser, listProfiles, renameUser, setAdmin, setPassword, setPlayerColor, type Profile } from "@/lib/users";
 
 const DEMO_USERS: Profile[] = ["Valentin", "Max", "Lena"].map((username, i) => ({
-  id: String(i), username, is_admin: i === 0, must_change_password: i === 2, created_at: new Date().toISOString(), inventory_public: i !== 1, aliases: [],
+  id: String(i), username, is_admin: i === 0, must_change_password: i === 2, created_at: new Date().toISOString(), inventory_public: i !== 1, aliases: [], color: PLAYER_COLORS[i],
 }));
 
 export default function UsersPage() {
@@ -18,6 +20,8 @@ export default function UsersPage() {
   const [newPw, setNewPw] = useState("");
   const [nameFor, setNameFor] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
+  const [colorFor, setColorFor] = useState<string | null>(null);
+  const [newColor, setNewColor] = useState("");
   const [note, setNote] = useState("");
 
   const reload = useCallback(() => {
@@ -78,18 +82,39 @@ export default function UsersPage() {
         <div className="table-wrap">
           <table>
             <thead>
-              <tr><th>Name</th><th>Rolle</th><th>Status</th><th className="r"><span className="sr-only">Aktionen</span></th></tr>
+              <tr><th><span className="sr-only">Farbe</span></th><th>Name</th><th>Rolle</th><th>Status</th><th className="r"><span className="sr-only">Aktionen</span></th></tr>
             </thead>
             <tbody>
               {users.map((u) => {
                 const self = u.id === profile.id;
                 return (
                   <tr key={u.id}>
+                    <td style={{ width: 24 }}><span className="dot" style={{ background: u.color ?? fallbackColor(u.username) }} title={u.color ?? "noch keine feste Farbe"} /></td>
                     <td style={{ fontWeight: 500 }}>{u.username}{self && <span className="faint"> (du)</span>}</td>
                     <td>{u.is_admin ? "Admin" : "Mitglied"}</td>
                     <td className="muted">{u.must_change_password ? "muss Passwort ändern" : "aktiv"}</td>
                     <td className="r">
-                      {nameFor === u.id ? (
+                      {colorFor === u.id ? (
+                        <form
+                          className="row"
+                          style={{ justifyContent: "flex-end", gap: 6 }}
+                          onSubmit={async (e) => {
+                            e.preventDefault();
+                            await run(() => setPlayerColor(u.id, newColor), `${u.username} hat jetzt eine neue Farbe.`);
+                            if (self) reloadProfile();
+                            setColorFor(null);
+                          }}
+                        >
+                          <PlayerColorPicker
+                            label={`Farbe für ${u.username}`}
+                            value={newColor}
+                            taken={new Map(users.filter((x) => x.id !== u.id && x.color).map((x) => [x.color as string, x.username]))}
+                            onPick={setNewColor}
+                          />
+                          <button className="btn" type="submit">Speichern</button>
+                          <button className="btn btn-quiet" type="button" onClick={() => setColorFor(null)}>Abbrechen</button>
+                        </form>
+                      ) : nameFor === u.id ? (
                         <form
                           className="row"
                           style={{ justifyContent: "flex-end", gap: 6 }}
@@ -127,8 +152,9 @@ export default function UsersPage() {
                         </form>
                       ) : (
                         <span className="row" style={{ justifyContent: "flex-end", gap: 4 }}>
-                          <button className="btn btn-quiet" type="button" onClick={() => { setNameFor(u.id); setNewName(u.username); setPwFor(null); }}>Umbenennen</button>
-                          <button className="btn btn-quiet" type="button" onClick={() => { setPwFor(u.id); setNewPw(""); setNameFor(null); }}>Passwort setzen</button>
+                          <button className="btn btn-quiet" type="button" onClick={() => { setColorFor(u.id); setNewColor(u.color ?? fallbackColor(u.username)); setNameFor(null); setPwFor(null); }}>Farbe</button>
+                          <button className="btn btn-quiet" type="button" onClick={() => { setNameFor(u.id); setNewName(u.username); setPwFor(null); setColorFor(null); }}>Umbenennen</button>
+                          <button className="btn btn-quiet" type="button" onClick={() => { setPwFor(u.id); setNewPw(""); setNameFor(null); setColorFor(null); }}>Passwort setzen</button>
                           {!self && (
                             <button className="btn btn-quiet" type="button" onClick={() => run(() => setAdmin(u.id, !u.is_admin), u.is_admin ? `${u.username} ist kein Admin mehr.` : `${u.username} ist jetzt Admin.`)}>
                               {u.is_admin ? "Admin entziehen" : "Zum Admin machen"}
