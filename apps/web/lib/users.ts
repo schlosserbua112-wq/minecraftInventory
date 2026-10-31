@@ -10,6 +10,8 @@ export interface Profile {
   inventory_public: boolean;
   /** Weitere Namen (z. B. Minecraft-Name), unter denen Kisten und Inventar mir gehören. */
   aliases: string[];
+  /** Feste Spielerfarbe (#rrggbb) für Kisten-Pins, Legende und Suche */
+  color?: string | null;
 }
 
 /** Interne Login-Adresse zu einem Benutzernamen (muss zu private.login_email in der Datenbank passen). */
@@ -57,6 +59,11 @@ export const setAdmin = (id: string, isAdmin: boolean) => rpc("admin_set_admin",
 export const deleteUser = (id: string) => rpc("admin_delete_user", { p_user: id });
 export const updateOwnSettings = (inventoryPublic: boolean, aliases: string[]) =>
   rpc("update_own_settings", { p_inventory_public: inventoryPublic, p_aliases: aliases });
+export async function setPlayerColor(id: string, color: string) {
+  const { error } = await supabase().rpc("set_player_color", { p_user: id, p_color: color });
+  if (error?.code === "PGRST202") throw new Error("Spielerfarben fehlen noch in der Datenbank. Das SQL dafür muss einmal in Supabase laufen.");
+  if (error) throw new Error(error.message);
+}
 export const changeOwnPassword = (oldPw: string, newPw: string) => rpc("change_own_password", { p_old: oldPw, p_new: newPw });
 
 /** Eigene private Kiste (Kisten-ID) oder null. Fehlt die Tabelle noch, gibt es einfach keine. */
