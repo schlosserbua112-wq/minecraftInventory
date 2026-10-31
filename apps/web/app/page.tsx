@@ -18,7 +18,8 @@ const TYPE_LABEL: Partial<Record<OwnerType | "all", string>> = { all: "Alles", p
 /** Spalten der Tabelle bei "Alle Items" ohne Besitzfilter */
 const TYPE_COLS: OwnerType[] = ["player", "unassigned"];
 /** Breite der Seitenleiste: Item-Spalte plus je Zahlenspalte (inkl. Summe); die Karte wird entsprechend schmaler. */
-const sideWidth = (cols: number) => 248 + 72 * (cols + 1);
+/** Platz für Item-Spalte (~210px), je Wertspalte ~80px plus Innenabstand der Seitenleiste. */
+const sideWidth = (cols: number) => 258 + 80 * (cols + 1);
 
 /** Wem gehört dieser Fundort, in einem Satzteil. */
 function ownerText(l: Location): string {
@@ -293,7 +294,7 @@ export default function SearchPage() {
               landmarkHits.length === 0 && <p className="empty">{emptyText}</p>
             ) : (
               <div className="table-wrap">
-                <table className="compare">
+                <table className={columns.length > 5 ? "compare dense" : "compare"}>
                   <thead>
                     <tr>
                       <th>Item</th>
