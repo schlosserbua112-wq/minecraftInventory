@@ -4,7 +4,7 @@ import type { Actions, PlayerStatsRow, Project, Snapshot, TakeRow } from "./type
 /** Beispieldaten im Browser: dieselbe Mock-Welt wie der Mock-Sammler, nur ohne Supabase. */
 export class DemoSource {
   private world: MockWorld = createMockWorld();
-  private base: Omit<Snapshot, "players" | "containers" | "stock" | "status" | "hidden"> = {
+  private base: Omit<Snapshot, "players" | "containers" | "stock" | "status" | "hidden" | "labels"> = {
     landmarks: [
       { id: 1, name: "Spawn", color: "#e9c46a", x: 12, z: -40, created_by: "demo" },
       { id: 2, name: "Dorf am See", color: "#7fb3e6", x: -310, z: 220, created_by: "demo" },
@@ -42,6 +42,7 @@ export class DemoSource {
   /** „Meine“-Markierungen im Demo-Modus, Kisten-ID → Kontoname */
   private claims = new Map<string, string>();
   private hidden = new Set<string>();
+  private labels = new Map<string, string>();
   private listeners = new Set<() => void>();
   private timer?: ReturnType<typeof setInterval>;
   private lastTick = new Date().toISOString();
@@ -96,6 +97,7 @@ export class DemoSource {
       stock: result.rows,
       status: { heartbeat_at: this.lastTick, mode: "demo", message: null },
       hidden: [...this.hidden],
+      labels: Object.fromEntries(this.labels),
     };
   }
 
@@ -171,6 +173,12 @@ export class DemoSource {
     hideContainer: async (id, hidden) => {
       if (hidden) this.hidden.add(id);
       else this.hidden.delete(id);
+      this.emit();
+    },
+    renameContainer: async (id, label) => {
+      const clean = label.replace(/\s+/g, " ").trim();
+      if (clean) this.labels.set(id, clean.slice(0, 60));
+      else this.labels.delete(id);
       this.emit();
     },
     listTakes: async () => structuredClone(this.takes),

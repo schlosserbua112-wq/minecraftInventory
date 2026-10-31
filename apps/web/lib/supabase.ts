@@ -32,7 +32,7 @@ async function loadScans() {
 }
 
 export async function loadSnapshot(): Promise<Snapshot> {
-  const [players, containers, stock, zones, status, scans, hidden, landmarks] = await Promise.all([
+  const [players, containers, stock, zones, status, scans, hidden, landmarks, labels] = await Promise.all([
     all<Snapshot["players"][number]>("players", "uuid, name, online, last_seen"),
     all<Snapshot["containers"][number]>("containers", "id, dimension, x, y, z, kind, custom_name, owner_type, owner_key, owner_label"),
     all<StockRow>("stock_items", "source_kind, source_id, owner_type, owner_key, owner_label, item_id, count"),
@@ -42,17 +42,20 @@ export async function loadSnapshot(): Promise<Snapshot> {
     supabase().from("container_hidden").select("container_id"),
     // Ebenso: ohne Tabelle einfach keine Landmarks
     supabase().from("landmarks").select("id, name, color, x, z, created_by").order("name"),
+    // Ohne Tabelle (SQL noch nicht ausgeführt) einfach keine Anzeigenamen
+    supabase().from("container_labels").select("container_id, label"),
   ]);
   return {
     players, containers, stock, zones, landmarks: landmarks.data ?? [], status: status[0] ?? null, scans: (scans.data ?? []) as unknown as Snapshot["scans"],
     hidden: (hidden.data ?? []).map((r) => r.container_id as string),
+    labels: Object.fromEntries((labels.data ?? []).map((r) => [r.container_id as string, r.label as string])),
   };
 }
 
 /** Ruft `onChange` auf, wenn sich Bestände, Spieler, Status oder Zuordnungen ändern. */
 export function subscribeChanges(onChange: () => void): () => void {
   const channel = supabase().channel("tracker");
-  for (const table of ["stock_items", "players", "collector_status", "scan_requests", "container_claims", "container_hidden", "landmarks", "zones"]) {
+  for (const table of ["stock_items", "players", "collector_status", "scan_requests", "container_claims", "container_hidden", "container_labels", "landmarks", "zones"]) {
     channel.on("postgres_changes", { event: "*", schema: "public", table }, onChange);
   }
   channel.subscribe();
@@ -186,6 +189,12 @@ export function supabaseActions(refresh: () => void): Actions {
     },
     hideContainer: async (id, hidden) => {
       const { error } = await db().rpc("hide_container", { p_container: id, p_hidden: hidden });
+      if (error) throw new Error(error.message);
+      refresh();
+    },
+    renameContainer: async (id, label) => {
+      const { error } = await db().rpc("rename_container", { p_container: id, p_label: label });
+      if (error?.code === "PGRST202") throw new Error("Umbenennen fehlt noch in der Datenbank. Das SQL dafür muss einmal in Supabase laufen.");
       if (error) throw new Error(error.message);
       refresh();
     },
