@@ -55,6 +55,8 @@ export interface Snapshot {
   scans: ScanRow[];
   /** Als „keine Spielerkiste“ ausgeblendete unbenannte Kisten (Kisten-IDs). */
   hidden: string[];
+  /** Selbst vergebene Anzeigenamen auf der Website, Kisten-ID → Name. */
+  labels: Record<string, string>;
 }
 
 export interface Actions {
@@ -82,6 +84,8 @@ export interface Actions {
   claimCommon(id: string): Promise<void>;
   /** Unbenannte Kiste ausblenden (true) oder wieder einblenden (false). */
   hideContainer(id: string, hidden: boolean): Promise<void>;
+  /** Anzeigenamen einer eigenen Kiste setzen; leer entfernt ihn. Der Name im Amboss bleibt. */
+  renameContainer(id: string, label: string): Promise<void>;
   /** Entnahmen aus den eigenen Kisten (Admins: aus allen), neueste zuerst. */
   listTakes(): Promise<TakeRow[]>;
   subscribeTakes(onChange: () => void): () => void;
