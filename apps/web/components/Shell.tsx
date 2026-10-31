@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useData } from "@/lib/data";
 import { ago } from "@/lib/derive";
 import { signOut } from "@/lib/users";
@@ -13,7 +13,15 @@ const NAV = [
   { href: "/", label: "Suche" },
   { href: "/inventare", label: "Wer hat was?" },
   { href: "/projekte", label: "Projekte" },
-  { href: "/verwaltung", label: "Verwaltung" },
+  { href: "/entnahmen", label: "Diebstahl-Tracker" },
+  { href: "/statistiken", label: "Statistiken" },
+];
+
+/** Einträge im Menü unter dem eigenen Namen. Verwaltung und Benutzer sehen nur Admins. */
+const ACCOUNT_MENU = [
+  { href: "/konto", label: "Kontoeinstellungen", admin: false },
+  { href: "/verwaltung", label: "Verwaltung", admin: true },
+  { href: "/benutzer", label: "Benutzer", admin: true },
 ];
 
 /** Lebenszeichen des Pi: nach 2 Minuten ohne Heartbeat gilt er als offline. */
@@ -50,13 +58,7 @@ export function Shell({ children }: { children: ReactNode }) {
         </Gate>
       );
   }
-  const nav = [
-    ...NAV.slice(0, 3),
-    { href: "/entnahmen", label: "Entnahmen" },
-    { href: "/statistiken", label: "Statistiken" },
-    ...NAV.slice(3),
-    ...(profile?.is_admin ? [{ href: "/benutzer", label: "Benutzer" }] : []),
-  ];
+  const nav = NAV;
 
   const beat = snapshot?.status?.heartbeat_at;
   const offline = mode === "live" && (!beat || now - Date.parse(beat) > 120_000);
@@ -82,10 +84,10 @@ export function Shell({ children }: { children: ReactNode }) {
           <span className="dot" style={{ background: offline ? "var(--down)" : "var(--up)" }} />
           {snapshot ? `${ago(beat, now)} aktualisiert · ${online} von ${snapshot.players.length} online` : "lädt …"}
         </span>
-        {mode === "live" && profile && (
+        {profile && (
           <span className="row" style={{ gap: 4 }}>
-            <Link href="/konto" className="btn btn-quiet" aria-current={pathname === "/konto" ? "page" : undefined}>{profile.username}</Link>
-            <button type="button" className="btn btn-quiet" onClick={signOut}>Abmelden</button>
+            <AccountMenu name={profile.username} admin={profile.is_admin} pathname={pathname} />
+            {mode === "live" && <button type="button" className="btn btn-quiet" onClick={signOut}>Abmelden</button>}
           </span>
         )}
       </header>
@@ -94,6 +96,53 @@ export function Shell({ children }: { children: ReactNode }) {
       {error && <div className="banner">Daten konnten nicht geladen werden: {error}</div>}
       {children}
     </>
+  );
+}
+
+function AccountMenu({ name, admin, pathname }: { name: string; admin: boolean; pathname: string }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  const items = ACCOUNT_MENU.filter((i) => admin || !i.admin);
+  const here = items.some((i) => pathname.startsWith(i.href));
+
+  useEffect(() => setOpen(false), [pathname]);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => {
+      if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("pointerdown", away);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("pointerdown", away);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [open]);
+
+  return (
+    <div className="menu" ref={box}>
+      <button
+        type="button"
+        className="btn btn-quiet"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-current={here ? "page" : undefined}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {name}
+        <span aria-hidden="true" className="menu-caret">▾</span>
+      </button>
+      {open && (
+        <div className="menu-list" role="menu">
+          {items.map((i) => (
+            <Link key={i.href} href={i.href} role="menuitem" aria-current={pathname.startsWith(i.href) ? "page" : undefined} onClick={() => setOpen(false)}>
+              {i.label}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

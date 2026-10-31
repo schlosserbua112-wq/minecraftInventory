@@ -82,7 +82,8 @@ export default function TakesPage() {
   return (
     <main className="page" style={{ maxWidth: 880 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <h1>{admin && !onlyMine ? "Entnahmen aus Spielerkisten" : "Entnahmen aus deinen Kisten"}</h1>
+        <h1>Diebstahl-Tracker</h1>
+        <p className="faint" style={{ margin: 0 }}>{admin && !onlyMine ? "Entnahmen aus allen Spielerkisten" : "Entnahmen aus deinen Kisten"}</p>
         <p className="muted" style={{ margin: 0 }}>
           Fehlt in einer Spielerkiste etwas, schaut der Sammler, wer gerade dort war und genau dieses Item dazubekommen hat.
           Minecraft selbst merkt sich das nicht, deshalb ist es eine Schätzung. Was du selbst nimmst und was Trichter abziehen, steht hier nicht.
