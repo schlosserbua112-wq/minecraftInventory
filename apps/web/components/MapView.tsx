@@ -5,7 +5,7 @@ import { regionsForZone, type OwnerType } from "@mc/core";
 import { useData } from "@/lib/data";
 import { OWNER_COLOR, OWNER_LABEL } from "@/lib/derive";
 import type { ContainerRow, LandmarkRow, ZoneRow } from "@/lib/types";
-import { useWorldMap } from "@/lib/worldmap";
+import { useBiomes, useWorldMap } from "@/lib/worldmap";
 
 /** Farben zur Auswahl für Landmarks */
 export const LANDMARK_COLORS = ["#e9c46a", "#f29e6d", "#ff9c8a", "#e88fb5", "#b48ce0", "#7fb3e6", "#6fd0c4", "#9ee08a", "#eef0ea"];
@@ -110,6 +110,34 @@ export function MapView({
       localStorage.setItem("karte.landmarks", on ? "an" : "aus");
     } catch {}
   };
+  const [showBiomes, setShowBiomesState] = useState(false);
+  useEffect(() => {
+    try {
+      if (localStorage.getItem("karte.biome") === "an") setShowBiomesState(true);
+    } catch {}
+  }, []);
+  const setShowBiomes = (on: boolean) => {
+    setShowBiomesState(on);
+    try {
+      localStorage.setItem("karte.biome", on ? "an" : "aus");
+    } catch {}
+  };
+  const biomes = useBiomes(showBiomes && world.tiles.length > 0);
+  /** Grenzlinien mit Umriss, damit nur sichtbare gezeichnet werden */
+  const biomeLines = useMemo(
+    () =>
+      (biomes.layer?.lines ?? []).map((l) => {
+        let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+        for (let i = 0; i < l.length; i += 2) {
+          minX = Math.min(minX, l[i]);
+          maxX = Math.max(maxX, l[i]);
+          minZ = Math.min(minZ, l[i + 1]);
+          maxZ = Math.max(maxZ, l[i + 1]);
+        }
+        return { d: `M${l.join(" ")}`, minX, maxX, minZ, maxZ };
+      }),
+    [biomes.layer],
+  );
   const [size, setSize] = useState({ w: 0, h: 0 });
   const aspect = size.h ? size.w / size.h : 1.5;
   const initial = useMemo(
@@ -290,6 +318,27 @@ export function MapView({
 
   const tiles = showWorld ? world.tiles.filter((t) => t.x + 512 > x0 && t.x < x0 + view.w && t.z + 512 > z0 && t.z < z0 + h) : [];
   const showChunks = view.w / 16 < 120;
+  const biomePath = biomes.layer
+    ? biomeLines.filter((l) => l.maxX >= x0 && l.minX <= x0 + view.w && l.maxZ >= z0 && l.minZ <= z0 + h).map((l) => l.d).join("")
+    : "";
+  /** Schilder: nur Flächen, die auf dem Bildschirm groß genug sind, größte zuerst, ohne Überlappung */
+  const biomeTags = useMemo(() => {
+    const out: { key: string; name: string; x: number; z: number; w: number }[] = [];
+    if (!biomes.layer) return out;
+    const placed: { x1: number; z1: number; x2: number; z2: number }[] = [];
+    const tagH = 20 * k;
+    for (const l of biomes.layer.labels) {
+      if (Math.sqrt(l.area) / k < 56) break; // nach Fläche sortiert: alle weiteren sind noch kleiner
+      if (l.x < x0 || l.x > x0 + view.w || l.z < z0 || l.z > z0 + h) continue;
+      const w = (l.name.length * 6.6 + 16) * k;
+      const box = { x1: l.x - w / 2 - 4 * k, z1: l.z - tagH / 2 - 4 * k, x2: l.x + w / 2 + 4 * k, z2: l.z + tagH / 2 + 4 * k };
+      if (placed.some((p) => p.x1 < box.x2 && box.x1 < p.x2 && p.z1 < box.z2 && box.z1 < p.z2)) continue;
+      placed.push(box);
+      out.push({ key: `${l.x},${l.z}`, name: l.name, x: l.x, z: l.z, w });
+      if (out.length >= 80) break;
+    }
+    return out;
+  }, [biomes.layer, k, x0, z0, view.w, h]);
   const pinSize = 24 * k;
   const editing = card?.kind === "landmark" ? card : null;
   /** Gespeicherte Landmarks, das gerade bearbeitete in seiner Entwurfsfassung */
@@ -334,6 +383,12 @@ export function MapView({
           <image key={`${t.x},${t.z}`} href={t.url} x={t.x} y={t.z} width={512} height={512} preserveAspectRatio="none" style={{ imageRendering: "pixelated" }} />
         ))}
         {showChunks && <rect x={x0} y={z0} width={view.w} height={h} fill="url(#chunks)" />}
+        {biomePath && (
+          <g pointerEvents="none" fill="none" strokeLinejoin="round" strokeLinecap="round">
+            <path d={biomePath} stroke="#000" strokeOpacity="0.45" strokeWidth={4 * k} />
+            <path d={biomePath} stroke="#fff" strokeOpacity="0.9" strokeWidth={1.75 * k} strokeDasharray={`${6 * k} ${4 * k}`} />
+          </g>
+        )}
         {regionLines.xs.map((x) => (
           <line key={`x${x}`} x1={x} x2={x} y1={z0} y2={z0 + h} stroke="#fff" strokeOpacity="0.35" strokeWidth={k} />
         ))}
@@ -344,6 +399,14 @@ export function MapView({
           <text key={r.text} x={r.x + 8 * k} y={r.z + 16 * k} fontSize={11 * k} fill="#fff" fillOpacity="0.8" stroke="#000" strokeOpacity="0.45" strokeWidth={3 * k} paintOrder="stroke">
             {r.text}
           </text>
+        ))}
+        {biomeTags.map((t) => (
+          <g key={t.key} pointerEvents="none" className="biome-tag">
+            <rect x={t.x - t.w / 2} y={t.z - 10 * k} width={t.w} height={20 * k} rx={10 * k} fill="#1d221c" fillOpacity="0.78" stroke="#fff" strokeOpacity="0.35" strokeWidth={k} />
+            <text x={t.x} y={t.z + 4 * k} fontSize={11.5 * k} fontWeight={600} textAnchor="middle" fill="#fff">
+              {t.name}
+            </text>
+          </g>
         ))}
         {zones.map((z) => (
           <g key={z.id}>
@@ -443,6 +506,12 @@ export function MapView({
           <button type="button" className="btn btn-quiet btn-small" onClick={() => setTool(null)}>Abbrechen</button>
         </div>
       )}
+      {!tool && !redrawing && !redrawError && biomes.missing && (
+        <div className="map-hint" data-ui role="status">
+          <span>Biome gibt es nach dem nächsten Neuzeichnen der Karte.</span>
+          <button type="button" className="btn btn-quiet btn-small" onClick={() => setShowBiomes(false)}>Ausblenden</button>
+        </div>
+      )}
       {!tool && (redrawing || redrawError) && (
         <div className="map-hint" data-ui role="status">
           <span className={redrawError ? "map-card-error" : undefined}>{redrawError || "Der Pi zeichnet die Karte neu. Das dauert ein paar Minuten."}</span>
@@ -481,6 +550,21 @@ export function MapView({
             onClick={() => setShowWorld((v) => !v)}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14" /></svg>
+          </button>
+        )}
+        {world.tiles.length > 0 && (
+          <button
+            type="button"
+            className="btn"
+            aria-label={showBiomes ? "Biome ausblenden" : "Biome einblenden"}
+            title={showBiomes ? "Biome ausblenden" : "Biome einblenden"}
+            aria-pressed={showBiomes}
+            onClick={() => setShowBiomes(!showBiomes)}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path d="M3 17c3-1 4-5 8-5s5 3 10 2" strokeDasharray="3 2.5" />
+              <path d="M4 5h7v4H4z" />
+            </svg>
           </button>
         )}
         {landmarks.length > 0 && (

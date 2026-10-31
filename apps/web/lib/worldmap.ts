@@ -56,3 +56,38 @@ export function useWorldMap(): { tiles: MapTile[]; updatedAt: string | null } {
 
   return state;
 }
+
+/** Biom-Ebene vom Sammler: Grenzlinien [x0, z0, x1, z1, …] und ein Schild je Fläche. */
+export interface BiomeLayer {
+  updated_at: string | null;
+  lines: number[][];
+  labels: { id: string; name: string; x: number; z: number; area: number }[];
+}
+
+/**
+ * Lädt overworld/biomes.json erst, wenn die Biom-Ansicht eingeschaltet ist.
+ * `missing`: eingeschaltet, aber der Sammler hat noch keine Biome gezeichnet.
+ */
+export function useBiomes(enabled: boolean): { layer: BiomeLayer | null; missing: boolean } {
+  const { mode, session, snapshot } = useData();
+  const redrawn = snapshot?.scans.find((r) => r.kind === "map" && r.finished_at)?.finished_at ?? null;
+  const [state, setState] = useState<{ layer: BiomeLayer | null; missing: boolean; key: string | null }>({ layer: null, missing: false, key: null });
+  const key = enabled && mode === "live" && session ? `${session.user.id}|${redrawn}` : null;
+
+  useEffect(() => {
+    if (!key || state.key === key) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase().storage.from("map").download("overworld/biomes.json");
+      if (cancelled) return;
+      if (error || !data) return setState({ layer: null, missing: true, key });
+      setState({ layer: JSON.parse(await data.text()) as BiomeLayer, missing: false, key });
+    })().catch((err) => console.warn("Biome nicht geladen:", err));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  return { layer: enabled ? state.layer : null, missing: enabled && state.missing };
+}

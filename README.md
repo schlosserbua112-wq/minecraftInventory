@@ -21,6 +21,8 @@ Unbenannte Kisten: Unbenannte Kisten mit Inhalt aus den Zonen erscheinen in der 
 
 Private Kiste: Unter „Konto“ macht jeder höchstens eine seiner Kisten privat. Andere Spieler sehen sie und ihren Inhalt dann nirgends mehr (Suche, Karte, Projekte), nur Admins; das prüft die Datenbank per RLS. Im Verlauf zählt ihr Inhalt für niemanden mit (der Sammler lässt sie bei den Summen weg). Gehört die Kiste nicht mehr dem Spieler (umbenannt oder „Nicht meine“), ist sie wieder für alle sichtbar.
 
+Biome auf der Karte: Beim Zeichnen der Weltkarte liest der Sammler aus den Region-Dateien das Biom an der Oberfläche (je 4 × 4 Blöcke), glättet es, schlägt Flüsse und Strände dem Nachbarbiom zu und legt Grenzlinien und ein Namensschild je Fläche als `overworld/biomes.json` in den Bucket „map“. Auf der Website schaltet der Knopf „Biome einblenden“ die Ebene an und aus; Schilder erscheinen nur für Flächen, die beim aktuellen Zoom groß genug sind.
+
 ## Entnahmen aus fremden Kisten
 
 Vanilla merkt sich nicht, wer eine Kiste geöffnet hat. Der Sammler vergleicht deshalb jede Abfrage mit der vorherigen: Fehlt in einer Spielerkiste in einer Zone etwas, schaut er, welcher andere Online-Spieler in der Nähe war (Position per RCON) und genau dieses Item dazubekommen hat. Stufen: „sicher“ (an der Kiste und Item bekommen), „wahrscheinlich“ (Item bekommen, in Reichweite), „möglich“ (an der Kiste, Item aber nicht im Inventar). Entnahmen durch den Besitzer selbst und ohne fremden Spieler in der Nähe (Trichter) werden nicht gemeldet. Die Website zeigt sie unter „Entnahmen“, jeder sieht seine Kisten, Admins alle. Auf der Pi-Kachel abschaltbar.

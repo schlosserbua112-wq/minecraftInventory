@@ -66,6 +66,9 @@ export function blockColor(name: string): Rgb {
   return c;
 }
 
+/** Biom-Zelle ohne Daten (Chunk nicht generiert). */
+export const NO_BIOME = 255;
+
 const isWater = (name: string) => /water|bubble_column|kelp|seagrass|sea_pickle/.test(name);
 
 /** Gepackte Werte aus einem Long-Array (Einträge überspannen keine Long-Grenzen, ab 1.16). */
@@ -105,6 +108,11 @@ export interface RegionMap {
   /** PNG 512 × 512, oder null, wenn die Region keine fertigen Chunks hat. */
   png: Buffer | null;
   chunks: number;
+  /**
+   * Biom an der Oberfläche je 4 × 4 Blöcke (so speichert Minecraft Biome): 128 × 128 Zellen,
+   * Wert = Index in `palette`, 255 = nicht generiert.
+   */
+  biomes: { palette: string[]; cells: Uint8Array };
 }
 
 /** Rendert eine Region-Datei. Hält nur Höhen und Farben der Region im Speicher (~1,5 MB). */
@@ -113,6 +121,9 @@ export function renderRegionMap(buf: Buffer, onError?: (index: number, err: unkn
   const height = new Int16Array(N * N).fill(-32768);
   const depth = new Uint8Array(N * N);
   const rgb = new Uint8Array(N * N * 3);
+  const biomePalette: string[] = [];
+  const biomeIds = new Map<string, number>();
+  const biomeCells = new Uint8Array(128 * 128).fill(NO_BIOME);
   let chunks = 0;
 
   for (const chunk of eachRegionChunk(buf, onError, ["xPos", "zPos", "yPos", "Status", "Heightmaps", "sections"], true)) {
@@ -130,6 +141,18 @@ export function renderRegionMap(buf: Buffer, onError?: (index: number, err: unkn
     const sections = new Map<number, { palette: string[]; idx: Uint16Array | null }>();
     const raw = new Map<number, Record<string, NbtValue>>();
     for (const s of (chunk.sections as Record<string, NbtValue>[] | undefined) ?? []) raw.set(Number(s.Y), s);
+    const biomeSections = new Map<number, { palette: string[]; idx: Uint16Array | null }>();
+    const biomeSection = (sy: number) => {
+      let s = biomeSections.get(sy);
+      if (s) return s;
+      const b = raw.get(sy)?.biomes as Record<string, NbtValue> | undefined;
+      const palette = ((b?.palette as NbtValue[] | undefined) ?? []).map(paletteName);
+      let idx: Uint16Array | null = null;
+      if (palette.length > 1 && b?.data instanceof BigInt64Array) idx = unpack(b.data, Math.ceil(Math.log2(palette.length)), 64);
+      s = { palette, idx };
+      biomeSections.set(sy, s);
+      return s;
+    };
     const section = (sy: number) => {
       let s = sections.get(sy);
       if (s) return s;
@@ -155,11 +178,25 @@ export function renderRegionMap(buf: Buffer, onError?: (index: number, err: unkn
         const c = blockColor(name);
         rgb[p * 3] = c[0]; rgb[p * 3 + 1] = c[1]; rgb[p * 3 + 2] = c[2];
         if (floor && isWater(name)) depth[p] = Math.min(255, Math.max(1, h - floor[i]!));
+        // Biom der 4 × 4-Zelle an der Oberfläche, gemessen an einer Spalte nahe der Zellmitte
+        if ((x & 3) === 1 && (z & 3) === 1) {
+          const b = biomeSection(Math.floor(y / 16));
+          const biome = b.palette.length ? b.palette[b.idx ? b.idx[((y & 15) >> 2) * 16 + (z >> 2) * 4 + (x >> 2)]! : 0] : undefined;
+          if (biome) {
+            let id = biomeIds.get(biome);
+            if (id === undefined && biomePalette.length < NO_BIOME) {
+              id = biomePalette.push(biome) - 1;
+              biomeIds.set(biome, id);
+            }
+            if (id !== undefined) biomeCells[(cz * 4 + (z >> 2)) * 128 + cx * 4 + (x >> 2)] = id;
+          }
+        }
       }
     }
     chunks++;
   }
-  if (!chunks) return { png: null, chunks };
+  const biomes = { palette: biomePalette, cells: biomeCells };
+  if (!chunks) return { png: null, chunks, biomes };
 
   const rgba = Buffer.alloc(N * N * 4);
   for (let p = 0; p < N * N; p++) {
@@ -179,7 +216,7 @@ export function renderRegionMap(buf: Buffer, onError?: (index: number, err: unkn
     rgba[p * 4 + 2] = Math.min(255, rgb[p * 3 + 2]! * f);
     rgba[p * 4 + 3] = 255;
   }
-  return { png: encodePng(rgba, N, N), chunks };
+  return { png: encodePng(rgba, N, N), chunks, biomes };
 }
 
 const CRC_TABLE = (() => {

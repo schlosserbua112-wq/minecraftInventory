@@ -2,3 +2,4 @@
 export * from "./nbt.js";
 export * from "./regionfile.js";
 export * from "./map.js";
+export * from "./biomes.js";
