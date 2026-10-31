@@ -11,6 +11,7 @@ export default function AdminPage() {
   const admin = Boolean(profile?.is_admin);
   const [form, setForm] = useState({ name: "", x: "0", z: "0", r: "200" });
   const [busy, setBusy] = useState(false);
+  if (!admin) return <main className="page"><p className="empty">Diese Seite ist nur für Admins.</p></main>;
   if (!snapshot) return <div className="page"><Loading /></div>;
 
   const unassigned = snapshot.containers.filter((c) => c.owner_type === "unassigned");
