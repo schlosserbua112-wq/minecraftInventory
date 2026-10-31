@@ -91,7 +91,7 @@ export class DemoSource {
           const o = result.owners.get(c.id)!;
           return {
             id: c.id, dimension: c.dimension, x: c.x, y: c.y, z: c.z, kind: c.kind, custom_name: c.customName,
-            owner_type: o.type, owner_key: o.key, owner_label: o.label,
+            owner_type: o.type, owner_key: o.key, owner_label: o.label, label: this.labels.get(c.id) ?? null,
           };
         }),
       stock: result.rows,

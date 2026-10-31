@@ -67,4 +67,15 @@ export function ago(iso: string | null | undefined, now = Date.now()): string {
   return `vor ${Math.round(h / 24)} Tagen`;
 }
 
+/** Anzeigename einer Kiste: eigener Name von der Website, sonst Amboss-Name in Anführungszeichen, sonst die Art. */
+export const chestTitle = (c: { label?: string | null; custom_name: string | null; kind: string }) =>
+  c.label ?? (c.custom_name ? `„${c.custom_name}“` : kindLabel(c.kind));
+
+/** Überschrift einer Kiste: bei Spielerkisten „<Name> von <Spieler>“, ohne eigenen Namen „Kiste von <Spieler>“. */
+export function chestHeading(c: ContainerRow): string {
+  if (c.owner_type === "player") return `${c.label ?? kindLabel(c.kind)} von ${c.owner_label ?? c.owner_key}`;
+  if (c.owner_type === "common" && !c.label) return c.custom_name === null ? `${kindLabel(c.kind)} der Allgemeinheit` : `„${c.custom_name}“`;
+  return chestTitle(c);
+}
+
 export const coords = (c: { x: number; y: number; z: number }) => `${c.x} / ${c.y} / ${c.z}`;

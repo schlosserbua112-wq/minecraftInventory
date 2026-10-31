@@ -7,7 +7,7 @@ import { ItemTable } from "@/components/ItemTable";
 import { Loading } from "@/components/Loading";
 import { MapView, type MapPin } from "@/components/MapView";
 import { useData } from "@/lib/data";
-import { OWNER_COLOR, OWNER_LABEL, SOURCE_LABEL, coords, kindLabel, totals, type Location } from "@/lib/derive";
+import { OWNER_COLOR, OWNER_LABEL, SOURCE_LABEL, chestHeading, coords, kindLabel, totals, type Location } from "@/lib/derive";
 import { fmt, itemName, matchesItem } from "@/lib/items";
 import { byOwner, colorOf, placesOf, scopeRows, useOwners, useStoredKeys, type Owner, type Scope } from "@/lib/search";
 import { useItemNames } from "@/lib/itemicons";
@@ -21,15 +21,33 @@ const TYPE_COLS: OwnerType[] = ["player", "unassigned"];
 /** Platz für Item-Spalte (~210px), je Wertspalte ~80px plus Innenabstand der Seitenleiste. */
 const sideWidth = (cols: number) => 258 + 80 * (cols + 1);
 
+/** Inhalt einer Kiste für den Hover-Text: die größten Posten, Rest zusammengefasst. */
+function contentsText(rows: StockRow[], max = 10): string {
+  const list = totals(rows);
+  if (!list.length) return "leer";
+  const lines = list.slice(0, max).map((t) => `${fmt.format(t.count)} × ${itemName(t.item_id)}`);
+  if (list.length > max) lines.push(`… und ${list.length - max} weitere`);
+  return lines.join("\n");
+}
+
 /** Wem gehört dieser Fundort, in einem Satzteil. */
 function ownerText(l: Location): string {
   const r = l.row;
   const what = l.container ? kindLabel(l.container.kind) : SOURCE_LABEL[r.source_kind];
-  if (r.owner_type === "player") return `${what} von ${r.owner_label}`;
+  if (r.owner_type === "player") return `${l.container?.label ?? what} von ${r.owner_label}`;
+  if (l.container?.label) return `${l.container.label} · ${ownerShort(l)}`;
   if (r.owner_type === "common") return `${what} · Allgemein`;
   if (r.owner_type === "project") return `${what} · Projekt ${r.owner_label}`;
   if (r.owner_key === "unbenannt") return `${what === "Fass" ? "Unbenanntes" : "Unbenannte"} ${what} · nicht zugeordnet`;
   return `${what} „${r.owner_label}“ · nicht zugeordnet`;
+}
+
+/** Besitz ohne Art, für Kisten mit eigenem Namen. */
+function ownerShort(l: Location): string {
+  const r = l.row;
+  if (r.owner_type === "common") return "Allgemein";
+  if (r.owner_type === "project") return `Projekt ${r.owner_label}`;
+  return "nicht zugeordnet";
 }
 
 function whereText(l: Location): string {
@@ -100,6 +118,8 @@ export default function SearchPage() {
   const pins: MapPin[] = useMemo(() => {
     if (!snapshot || (showHidden && mode === "all")) return [];
     if (!item) {
+      const contents = new Map<string, StockRow[]>();
+      for (const r of snapshot.stock) if (r.source_kind === "container") contents.set(r.source_id, [...(contents.get(r.source_id) ?? []), r]);
       return snapshot.containers
         .filter((c) => c.owner_type && (mode === "players" ? c.owner_type === "player" && keys.includes(c.owner_key ?? "") : type === "all" || c.owner_type === type))
         .map((c) => ({
@@ -108,7 +128,8 @@ export default function SearchPage() {
           z: c.z,
           ownerType: c.owner_type!,
           color: mode === "players" ? ownerOf.get(c.owner_key ?? "")?.color : undefined,
-          title: `${c.owner_type === "player" ? `Kiste von ${c.owner_label}` : c.custom_name ?? (c.owner_type === "common" ? "Kiste der Allgemeinheit" : "Unbenannte Kiste")} · ${coords(c)}`,
+          title: `${c.owner_type === "player" || c.owner_type === "common" || c.label ? chestHeading(c) : c.custom_name ?? "Unbenannte Kiste"} · ${coords(c)}`,
+          detail: contentsText(contents.get(c.id) ?? []),
         }));
     }
     return places
@@ -476,13 +497,14 @@ function ChestDetail({
         {backLabel}
       </button>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <h2>{chest.custom_name ? `„${chest.custom_name}“` : kindLabel(chest.kind)}</h2>
+        <h2>{chestHeading(chest)}</h2>
         <span className="badge">
           <span className="dot" style={{ background: color }} />
           {chestOwnerText(chest, owner)}
         </span>
         <span className="muted small">
           {kindLabel(chest.kind)} bei {coords(chest)}
+          {chest.label && chest.custom_name ? ` · im Amboss „${chest.custom_name}“` : ""}
         </span>
       </div>
       {chest.custom_name === null && <ClaimActions key={chest.id} chest={chest} onHidden={onHidden} />}
@@ -496,7 +518,7 @@ function ChestDetail({
                 <button key={c.id} type="button" className="item-row" aria-current={c.id === chest.id} onClick={() => onPick(c.id)}>
                   <span className="dot" style={{ background: OWNER_COLOR[c.owner_type ?? "unassigned"] }} />
                   <span className="grow">
-                    <span>{c.custom_name ? `„${c.custom_name}“` : kindLabel(c.kind)} · Höhe {c.y}</span>
+                    <span>{chestHeading(c)} · Höhe {c.y}</span>
                     <span className="sub">{nearbyOwner(c)} · {coords(c)}</span>
                   </span>
                   <span className="qty">{fmt.format(itemsIn(c.id))}</span>
