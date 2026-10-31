@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent, type WheelEvent } from "react";
 import { regionsForZone, type OwnerType } from "@mc/core";
 import { useData } from "@/lib/data";
-import { OWNER_COLOR, OWNER_LABEL } from "@/lib/derive";
+import { OWNER_COLOR, OWNER_LABEL, chestHeading } from "@/lib/derive";
 import type { ContainerRow, LandmarkRow, ZoneRow } from "@/lib/types";
 import { useBiomes, useWorldMap } from "@/lib/worldmap";
 
@@ -28,6 +28,8 @@ export interface MapPin {
   color?: string;
   label?: string;
   title: string;
+  /** Weitere Zeilen im Hover-Text, z. B. der Inhalt der Kiste (nur bei einer einzelnen Kiste) */
+  detail?: string;
 }
 
 interface View {
@@ -444,7 +446,7 @@ export function MapView({
           const s = sel ? pinSize * 1.15 : p.label || count > 1 ? pinSize : pinSize * 0.5;
           return (
             <g key={p.id} data-pin onClick={() => onSelect?.(p.id)} style={{ cursor: onSelect ? "pointer" : "default" }}>
-              <title>{count > 1 ? `${count} Kisten übereinander:\n${titles.join("\n")}` : p.title}</title>
+              <title>{count > 1 ? `${count} Kisten übereinander:\n${titles.join("\n")}` : p.detail ? `${p.title}\n${p.detail}` : p.title}</title>
               <rect
                 x={p.x - s / 2}
                 y={p.z - s / 2}
@@ -730,5 +732,5 @@ function MapCard({
 export function containerPins(containers: ContainerRow[]): MapPin[] {
   return containers
     .filter((c) => c.owner_type)
-    .map((c) => ({ id: c.id, x: c.x, z: c.z, ownerType: c.owner_type!, title: `${c.custom_name ?? "Kiste"} · ${c.x} / ${c.y} / ${c.z}` }));
+    .map((c) => ({ id: c.id, x: c.x, z: c.z, ownerType: c.owner_type!, title: `${chestHeading(c)} · ${c.x} / ${c.y} / ${c.z}` }));
 }

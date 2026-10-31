@@ -45,10 +45,11 @@ export async function loadSnapshot(): Promise<Snapshot> {
     // Ohne Tabelle (SQL noch nicht ausgeführt) einfach keine Anzeigenamen
     supabase().from("container_labels").select("container_id, label"),
   ]);
+  const labelMap = Object.fromEntries((labels.data ?? []).map((r) => [r.container_id as string, r.label as string]));
   return {
-    players, containers, stock, zones, landmarks: landmarks.data ?? [], status: status[0] ?? null, scans: (scans.data ?? []) as unknown as Snapshot["scans"],
+    players, containers: containers.map((c) => ({ ...c, label: labelMap[c.id] ?? null })), stock, zones, landmarks: landmarks.data ?? [], status: status[0] ?? null, scans: (scans.data ?? []) as unknown as Snapshot["scans"],
     hidden: (hidden.data ?? []).map((r) => r.container_id as string),
-    labels: Object.fromEntries((labels.data ?? []).map((r) => [r.container_id as string, r.label as string])),
+    labels: labelMap,
   };
 }
 

@@ -122,7 +122,7 @@ export default function TakesPage() {
           )}
           {shown.map((t) => {
             const c = chests.get(t.container_id);
-            const where = `${c?.custom_name ?? kindLabel(c?.kind ?? "chest")} bei ${coords(c ?? posOf(t.container_id))}`;
+            const where = `${c?.label ?? c?.custom_name ?? kindLabel(c?.kind ?? "chest")} bei ${coords(c ?? posOf(t.container_id))}`;
             const conf = CONFIDENCE[t.confidence];
             const [first, ...rest] = t.suspects;
             return (

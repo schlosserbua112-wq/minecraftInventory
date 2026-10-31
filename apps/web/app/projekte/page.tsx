@@ -15,7 +15,7 @@ const COLOR_DIRECT = "var(--accent)";
 const COLOR_OWNER = "var(--own-project)";
 const COLOR_OTHER = "var(--own-unassigned)";
 
-const chestName = (c: ContainerRow) => c.custom_name ?? `${kindLabel(c.kind)} ohne Namen`;
+const chestName = (c: ContainerRow) => c.label ?? c.custom_name ?? `${kindLabel(c.kind)} ohne Namen`;
 
 /** Bestand je Item aus den Kisten des Projekts: einzeln gewählte und alle Kisten der gewählten Spieler. */
 function projectStock(s: Snapshot, p: Project) {

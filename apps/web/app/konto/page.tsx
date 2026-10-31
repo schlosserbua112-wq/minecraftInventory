@@ -115,7 +115,7 @@ function PrivateChest({ mode, userId, me, snapshot }: { mode: string; userId: st
       .sort((a, b) => b.items - a.items);
   }, [snapshot, me]);
 
-  const label = (c: (typeof mine)[number]) => `${c.custom_name ?? kindLabel(c.kind)} · ${coords(c)} · ${fmt.format(c.items)} Items`;
+  const label = (c: (typeof mine)[number]) => `${c.label ?? c.custom_name ?? kindLabel(c.kind)} · ${coords(c)} · ${fmt.format(c.items)} Items`;
   const privateChest = mine.find((c) => c.id === current);
 
   async function apply(id: string, on: boolean) {
