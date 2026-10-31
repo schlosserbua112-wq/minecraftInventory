@@ -161,8 +161,14 @@ export class SupabaseSink implements Sink {
     );
   }
 
+  private resumedScans = false;
+
   async takeScanRequests(): Promise<ScanRequest[]> {
-    const open = (cols: string) => this.db.from("scan_requests").select(cols).is("started_at", null);
+    // Beim ersten Abruf auch angefangene, nie fertige Anfragen übernehmen: Der Sammler wurde
+    // mittendrin neu gestartet, sonst hingen sie für immer ("Karte wird neu gezeichnet …").
+    const column = this.resumedScans ? "started_at" : "finished_at";
+    this.resumedScans = true;
+    const open = (cols: string) => this.db.from("scan_requests").select(cols).is(column, null);
     let { data, error } = await open("id, kind");
     // Spalte "kind" fehlt noch (SQL nicht ausgeführt): alles sind normale Suchanfragen
     if (error?.code === "42703") ({ data, error } = await open("id"));
