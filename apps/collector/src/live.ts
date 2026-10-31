@@ -13,7 +13,7 @@ import {
   type PlayerSnapshot,
   type PlayerStats,
 } from "@mc/core";
-import { eachRegionChunk, readNbt, renderRegionMap } from "@mc/core/node";
+import { BiomeAtlas, eachRegionChunk, readNbt, renderRegionMap } from "@mc/core/node";
 import type { ServerConfig } from "./config.js";
 import { Rcon } from "./rcon.js";
 import type { MapStore } from "./mapstore.js";
@@ -301,6 +301,7 @@ export class LiveCollector {
     const index = await store.loadIndex();
     let regions = 0;
     let uploaded = 0;
+    const biomes = new BiomeAtlas();
     try {
       await this.files.open();
       const dir = await this.regionDir("minecraft:overworld");
@@ -309,8 +310,10 @@ export class LiveCollector {
       const seen = new Set<string>();
       for (const file of files) {
         const region = file.slice(0, -4);
-        const { png } = renderRegionMap(await this.files.read(`${dir}/${file}`), (i, err) => console.warn(`[karte] ${file} Chunk ${i}: ${String(err)}`));
+        const { png, biomes: b } = renderRegionMap(await this.files.read(`${dir}/${file}`), (i, err) => console.warn(`[karte] ${file} Chunk ${i}: ${String(err)}`));
         if (!png) continue;
+        const [, rx, rz] = region.split(".");
+        biomes.add(Number(rx), Number(rz), b);
         seen.add(region);
         regions++;
         if (await store.putTile(index, region, png)) uploaded++;
@@ -322,6 +325,14 @@ export class LiveCollector {
       this.files.close();
     }
     await store.saveIndex(index);
+    // Biom-Ebene: ein Fehler hier soll die fertige Karte nicht verwerfen
+    if (biomes.size) {
+      try {
+        await store.saveBiomes(biomes.build());
+      } catch (err) {
+        console.warn(`[karte] Biome: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
     this.lastMapDay = new Date().toISOString().slice(0, 10);
     this.lastMapAt = new Date().toISOString();
     return { regions, uploaded };

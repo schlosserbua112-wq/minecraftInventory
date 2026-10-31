@@ -156,6 +156,23 @@ describe("Weltkarte", () => {
     expect(px(500, 500)[3]).toBe(0); // nicht generiert, durchsichtig
   });
 
+  it("liest die Oberflächen-Biome und baut Grenzen mit Namensschildern", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { renderRegionMap, BiomeAtlas } = await import("../src/node.js");
+    const buf = readFileSync(new URL("./fixtures/mc-26.3/world/dimensions/minecraft/overworld/region/r.0.0.mca", import.meta.url));
+    const { biomes } = renderRegionMap(buf);
+    expect(biomes.palette).toContain("minecraft:meadow");
+    // Vales Kisten bei 0 / 16 stehen auf einer Wiese
+    expect(biomes.palette[biomes.cells[4 * 128 + 0]!]).toBe("minecraft:meadow");
+    const atlas = new BiomeAtlas();
+    atlas.add(0, 0, biomes);
+    const layer = atlas.build();
+    expect(layer.labels.map((l) => l.name)).toEqual(expect.arrayContaining(["Wiese", "Wald"]));
+    expect(layer.labels.some((l) => l.id === "minecraft:river")).toBe(false); // Flüsse zählen zum Nachbarbiom
+    expect(layer.lines.length).toBeGreaterThan(0);
+    for (const l of layer.lines) expect(l.length % 2).toBe(0);
+  });
+
   it("liest Long-Arrays auf Wunsch verlustfrei", () => {
     const long = Buffer.alloc(8);
     long.writeBigInt64BE(-0x0123456789abcdefn);

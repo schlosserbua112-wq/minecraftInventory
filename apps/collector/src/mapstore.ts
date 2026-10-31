@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { BiomeLayer } from "@mc/core/node";
 
 /**
  * Ablage der Kartenkacheln. Die Website liest `overworld/index.json` und lädt
@@ -18,6 +19,8 @@ export interface MapStore {
   /** Lädt die Kachel nur hoch, wenn sie sich geändert hat; liefert true bei Upload. */
   putTile(index: MapIndex, region: string, png: Buffer): Promise<boolean>;
   saveIndex(index: MapIndex): Promise<void>;
+  /** Biom-Ebene (Grenzen und Namensschilder) als overworld/biomes.json */
+  saveBiomes(layer: BiomeLayer): Promise<void>;
 }
 
 const DIM = "overworld";
@@ -54,6 +57,10 @@ export class SupabaseMapStore implements MapStore {
     await this.upload(`${DIM}/index.json`, Buffer.from(JSON.stringify(index)), "application/json", "60");
   }
 
+  async saveBiomes(layer: BiomeLayer) {
+    await this.upload(`${DIM}/biomes.json`, Buffer.from(JSON.stringify(layer)), "application/json", "60");
+  }
+
   private async upload(path: string, body: Buffer, contentType: string, cacheControl: string) {
     const { error } = await this.db.storage.from(this.bucket).upload(path, body, { contentType, cacheControl, upsert: true });
     if (error) throw new Error(`Karte hochladen (${path}): ${error.message}`);
@@ -82,5 +89,9 @@ export class LocalMapStore implements MapStore {
     index.updated_at = new Date().toISOString();
     mkdirSync(join(this.dir, DIM), { recursive: true });
     writeFileSync(join(this.dir, DIM, "index.json"), JSON.stringify(index));
+  }
+  async saveBiomes(layer: BiomeLayer) {
+    mkdirSync(join(this.dir, DIM), { recursive: true });
+    writeFileSync(join(this.dir, DIM, "biomes.json"), JSON.stringify(layer));
   }
 }
