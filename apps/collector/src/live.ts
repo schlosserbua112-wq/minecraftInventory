@@ -1,6 +1,9 @@
 import {
   containerFromBlockEntity,
-  containersFromChunk,
+  groupDoubleChests,
+  mergeDoubleChests,
+  mergedAwayIds,
+  mergeGroup,
   playerDimension,
   playerEnderChest,
   playerInventory,
@@ -13,7 +16,7 @@ import {
   type PlayerSnapshot,
   type PlayerStats,
 } from "@mc/core";
-import { BiomeAtlas, eachRegionChunk, readNbt, renderRegionMap } from "@mc/core/node";
+import { BiomeAtlas, containersFromRegion, readNbt, renderRegionMap } from "@mc/core/node";
 import type { ServerConfig } from "./config.js";
 import { Rcon } from "./rcon.js";
 import type { MapStore } from "./mapstore.js";
@@ -54,8 +57,10 @@ export interface LiveResult {
   containers: ContainerSnapshot[];
   /** Positionen der Online-Spieler (nur mit Quelle „Entnahmen“). */
   positions?: PlayerPos[];
-  /** Kisten, die in dieser Abfrage live per RCON gelesen wurden. */
+  /** Kisten, die in dieser Abfrage live per RCON gelesen wurden (bei Doppelkisten beide Hälften). */
   liveIds?: Set<string>;
+  /** Doppelkisten als [ID der Kiste, ID der zweiten Hälfte], damit alte Daten der Hälfte umziehen. */
+  mergedHalves?: [string, string][];
 }
 
 /**
@@ -174,34 +179,46 @@ export class LiveCollector {
 
     const liveIds = new Set<string>();
     if (s.sources.zoneChests) {
-      for (const c of [...this.zoneContainers.values()]) {
-        if (!c.customName && !wantUnnamed(c)) continue;
-        let data, res;
-        try {
-          ({ data, res } = await this.dataGet(`execute in ${c.dimension} run data get block ${c.x} ${c.y} ${c.z}`, `${c.x}, ${c.y}, ${c.z}`));
-        } catch (err) {
-          console.warn(`[live] Kiste ${c.id}: ${err instanceof Error ? err.message : String(err)}`);
-          continue;
-        }
-        if (!data) {
-          // Kiste abgebaut oder Bereich nicht geladen: nur bei eindeutiger Meldung entfernen
-          if (!res.includes(" has the following ") && /no block entity|not a block entity/i.test(res)) this.zoneContainers.delete(c.id);
-          continue;
-        }
-        const raw = { id: KIND_IDS[c.kind], ...(data as object) };
-        const fresh = containerFromBlockEntity(raw, c.dimension, c);
-        if (fresh) {
-          this.zoneContainers.set(c.id, fresh);
-          liveIds.add(c.id);
-        } else this.zoneContainers.delete(c.id);
+      // Doppelkisten als Ganzes: Name und „Meine“-Markierung gelten für beide Hälften
+      for (const group of groupDoubleChests(this.zoneContainers.values())) {
+        const whole = mergeGroup(group);
+        if (!whole.customName && !wantUnnamed(whole)) continue;
+        let ok = true;
+        for (const c of group) ok = (await this.readZoneContainer(c)) && ok;
+        if (ok) liveIds.add(whole.id);
       }
     }
 
-    const containers = [
-      ...(s.sources.zoneChests ? [...this.zoneContainers.values()].filter((c) => c.customName || wantUnnamed(c)) : []),
-      ...(s.sources.fullScan ? this.outsideContainers.values() : []),
-    ];
-    return { players, containers, positions, liveIds };
+    const all = mergeDoubleChests([...(s.sources.zoneChests ? this.zoneContainers.values() : []), ...(s.sources.fullScan ? this.outsideContainers.values() : [])]);
+    const containers = all.filter((c) => !this.zoneContainers.has(c.id) || c.customName || wantUnnamed(c));
+    const mergedHalves = all.flatMap((c) => mergedAwayIds(c).map((drop): [string, string] => [c.id, drop]));
+    return { players, containers, positions, liveIds, mergedHalves };
+  }
+
+  /** Eine Kiste (oder Kistenhälfte) der Zonen per RCON neu lesen; true, wenn das geklappt hat. */
+  private async readZoneContainer(c: ContainerSnapshot): Promise<boolean> {
+    let data, res;
+    try {
+      ({ data, res } = await this.dataGet(`execute in ${c.dimension} run data get block ${c.x} ${c.y} ${c.z}`, `${c.x}, ${c.y}, ${c.z}`));
+    } catch (err) {
+      console.warn(`[live] Kiste ${c.id}: ${err instanceof Error ? err.message : String(err)}`);
+      return false;
+    }
+    if (!data) {
+      // Kiste abgebaut oder Bereich nicht geladen: nur bei eindeutiger Meldung entfernen
+      if (!res.includes(" has the following ") && /no block entity|not a block entity/i.test(res)) this.zoneContainers.delete(c.id);
+      return false;
+    }
+    const raw = { id: KIND_IDS[c.kind], ...(data as object) };
+    const fresh = containerFromBlockEntity(raw, c.dimension, c);
+    if (!fresh) {
+      this.zoneContainers.delete(c.id);
+      return false;
+    }
+    // RCON liefert keinen Block-State: Zuordnung der Hälften aus dem letzten Scan behalten
+    if (c.partner) Object.assign(fresh, { partner: c.partner, half: c.half });
+    this.zoneContainers.set(c.id, fresh);
+    return true;
   }
 
   /** Position und Dimension eines Online-Spielers; null, wenn eine Antwort fehlt. */
@@ -242,11 +259,18 @@ export class LiveCollector {
         const next = new Map<string, ContainerSnapshot>();
         for (const zone of zones) {
           // Unbenannte immer mitnehmen: ob sie zählen, entscheiden Website-Schalter und „Meine“-Markierungen je Abfrage
-          for (const c of await this.containersInRegions(zone.dimension, regionsForZone(zone.center_x, zone.center_z, zone.radius), true)) {
-            if ((c.x - zone.center_x) ** 2 + (c.z - zone.center_z) ** 2 > zone.radius ** 2) continue;
-            if (!this.zoneContainers.has(c.id)) found++;
-            // Live-Stand behalten, falls schon bekannt (Datei kann bis zum nächsten Autosave älter sein)
-            next.set(c.id, this.zoneContainers.get(c.id) ?? c);
+          const candidates = await this.containersInRegions(zone.dimension, regionsForZone(zone.center_x, zone.center_z, zone.radius), true);
+          const inside = (c: ContainerSnapshot) => (c.x - zone.center_x) ** 2 + (c.z - zone.center_z) ** 2 <= zone.radius ** 2;
+          // Doppelkisten am Zonenrand: beide Hälften gehören in die Zone, wenn eine drin liegt
+          for (const group of groupDoubleChests(candidates)) {
+            if (!group.some(inside)) continue;
+            if (!group.some((c) => this.zoneContainers.has(c.id))) found++;
+            for (const c of group) {
+              const known = this.zoneContainers.get(c.id);
+              // Live-Inhalt behalten, falls schon bekannt (Datei kann bis zum nächsten Autosave älter sein),
+              // die Zuordnung der Hälften aber immer aus der Datei
+              next.set(c.id, known ? { ...known, partner: c.partner, half: c.half } : c);
+            }
           }
         }
         this.zoneContainers = next;
@@ -275,12 +299,12 @@ export class LiveCollector {
         const dir = await this.regionDir(dimension);
         if (!dir) continue;
         const files = (await this.files.list(dir)).filter((f) => /^r\.-?\d+\.-?\d+\.mca$/.test(f));
-        for (const c of await this.containersInRegions(dimension, files)) if (!inZone(c)) next.set(c.id, c);
+        for (const c of await this.containersInRegions(dimension, files)) if (!inZone(c) && !this.zoneContainers.has(c.id)) next.set(c.id, c);
       }
     } finally {
       this.files.close();
     }
-    const found = [...next.keys()].filter((id) => !this.outsideContainers.has(id)).length;
+    const found = mergeDoubleChests(next.values()).filter((c) => !this.outsideContainers.has(c.id)).length;
     this.outsideContainers = next;
     this.lastFullScanDay = new Date().toISOString().slice(0, 10);
     this.lastFullScanAt = new Date().toISOString();
@@ -355,18 +379,20 @@ export class LiveCollector {
     const dir = await this.regionDir(dimension);
     if (!dir) return [];
     const existing = new Set(await this.files.list(dir));
-    const out: ContainerSnapshot[] = [];
+    const all: ContainerSnapshot[] = [];
     for (const file of regionFiles) {
       if (!existing.has(file)) continue;
       const buf = await this.files.read(`${dir}/${file}`);
-      for (const chunk of eachRegionChunk(buf, (i, err) => console.warn(`[scan] ${file} Chunk ${i}: ${String(err)}`))) {
-        // Unbenannte Kisten zählen laut Namensregeln nicht; weglassen spart Speicher und RCON-Abfragen
-        for (const c of containersFromChunk(chunk, dimension)) {
-          if (c.customName || (keepUnnamed && !c.generated && c.items.length)) out.push(c);
-        }
-      }
+      all.push(...containersFromRegion(buf, dimension, (i, err) => console.warn(`[scan] ${file} Chunk ${i}: ${String(err)}`)));
     }
-    return out;
+    // Unbenannte Kisten zählen laut Namensregeln nicht; weglassen spart Speicher und RCON-Abfragen.
+    // Doppelkisten als Ganzes prüfen: die leere oder unbenannte Hälfte einer benannten Kiste bleibt.
+    return groupDoubleChests(all)
+      .filter((group) => {
+        const c = mergeGroup(group);
+        return c.customName || (keepUnnamed && !c.generated && c.items.length);
+      })
+      .flat();
   }
 
   /**

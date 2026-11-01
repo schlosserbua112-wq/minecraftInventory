@@ -23,6 +23,12 @@ export interface ItemStack {
 
 export type ContainerKind = "chest" | "trapped_chest" | "barrel" | "shulker_box";
 
+export interface BlockPos {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export interface ContainerSnapshot {
   /** Stabile ID aus Dimension und Koordinaten, siehe `containerId`. */
   id: string;
@@ -36,6 +42,15 @@ export interface ContainerSnapshot {
   /** Generierte Kiste, die noch nie geöffnet wurde (hat eine Loot-Tabelle statt Items). */
   generated?: boolean;
   items: ItemStack[];
+  /** Nur Kistenhälften: Position der anderen Hälfte laut Block-State (`type=left/right`, `facing`). */
+  partner?: BlockPos;
+  /** Nur Kistenhälften: welche Hälfte das ist. */
+  half?: "left" | "right";
+  /**
+   * Nur zusammengeführte Doppelkisten: Positionen beider Hälften, die Hälfte mit der ID zuerst.
+   * Die ID der Doppelkiste ist die der rechten Hälfte (im Spiel die oberen drei Reihen).
+   */
+  parts?: BlockPos[];
 }
 
 export interface PlayerSnapshot {

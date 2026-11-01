@@ -43,6 +43,8 @@ interface Source {
     /** Nur live: Spielerpositionen und live gelesene Kisten, für die Entnahmen. */
     positions?: PlayerPos[];
     liveIds?: Set<string>;
+    /** Nur live: Doppelkisten als [ID der Kiste, ID der zweiten Hälfte]. */
+    mergedHalves?: [string, string][];
   }>;
   close(): void;
 }
@@ -202,10 +204,15 @@ async function main() {
         await sink.heartbeat(config.mode, "pausiert");
       } else {
         const owners = await sink.loadOwners();
-        const unnamed = await sink.loadUnnamed();
-        const rule = unnamedRule(s, unnamed);
+        let unnamed = await sink.loadUnnamed();
+        let rule = unnamedRule(s, unnamed);
         const wantUnnamed = (c: ContainerSnapshot) => unnamed.claims.has(c.id) || (rule !== "ignore" && !unnamed.hidden.has(c.id));
         const run = await source.run(s, sink, wantUnnamed);
+        // Neu erkannte Doppelkisten: Markierungen der zweiten Hälfte sofort übernehmen und neu laden
+        if (run.mergedHalves?.length && (await sink.mergeHalves(run.mergedHalves))) {
+          unnamed = await sink.loadUnnamed();
+          rule = unnamedRule(s, unnamed);
+        }
         const { players, message, extra } = run;
         const containers = run.containers.filter((c) => c.customName || wantUnnamed(c));
         const result = aggregate(players, containers, rule, owners, unnamed.claims);

@@ -8,5 +8,6 @@ export * from "./mock.js";
 export * from "./materials.js";
 export * from "./snbt.js";
 export * from "./world.js";
+export * from "./chests.js";
 export * from "./takes.js";
 export * from "./stats.js";
