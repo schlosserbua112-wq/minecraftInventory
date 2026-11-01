@@ -19,6 +19,11 @@ export interface Sink {
   writeTakes(events: TakeEvent[]): Promise<void>;
   /** Spielerstatistiken speichern (nur geänderte). Fehler werden nur gemeldet. */
   writeStats(rows: PlayerStatsRow[]): Promise<void>;
+  /**
+   * Doppelkisten: Namen, Zuordnungen, private Kiste usw. der zweiten Hälfte auf die Kiste übertragen.
+   * Liefert true, wenn dabei etwas Neues zusammengeführt wurde. Fehler werden nur gemeldet.
+   */
+  mergeHalves(pairs: [keep: string, drop: string][]): Promise<boolean>;
 }
 
 export interface UnnamedState {
@@ -272,6 +277,26 @@ export class SupabaseSink implements Sink {
     console.log(`[sink] Statistiken von ${changed.length} Spielern aktualisiert`);
   }
 
+  /** Schon zusammengeführte Hälften in diesem Lauf, damit jede nur einmal an die Datenbank geht. */
+  private mergedHalves = new Set<string>();
+  private mergeWarned = false;
+
+  async mergeHalves(pairs: [string, string][]) {
+    const fresh = pairs.filter(([keep, drop]) => !this.mergedHalves.has(`${keep}|${drop}`));
+    if (!fresh.length) return false;
+    const { error } = await this.db.rpc("merge_double_chests", { p_keep: fresh.map((p) => p[0]), p_drop: fresh.map((p) => p[1]) });
+    if (error) {
+      // Funktion fehlt noch (SQL nicht ausgeführt): einmal melden, Doppelkisten zählen trotzdem als eine
+      if (!this.mergeWarned) console.warn(`[sink] Doppelkisten nicht zusammengeführt: ${error.message}`);
+      this.mergeWarned = true;
+      return false;
+    }
+    this.mergeWarned = false;
+    for (const [keep, drop] of fresh) this.mergedHalves.add(`${keep}|${drop}`);
+    console.log(`[sink] ${fresh.length} Doppelkisten zusammengeführt`);
+    return true;
+  }
+
   private async check(q: PromiseLike<{ error: unknown }>) {
     const { error } = await q;
     if (error) throw error;
@@ -302,6 +327,9 @@ export class ConsoleSink implements Sink {
   }
   async writeStats(rows: PlayerStatsRow[]) {
     for (const r of rows) console.log(`[console] Statistik ${r.name}: ${Math.round((r.stats.custom.play_time ?? 0) / 72000)} h, ${r.stats.custom.deaths ?? 0} Tode, ${r.stats.totals.mined} abgebaut`);
+  }
+  async mergeHalves(_pairs: [string, string][]) {
+    return false;
   }
   async writeTakes(events: TakeEvent[]) {
     for (const e of events) console.log(`[console] Entnahme: ${e.count}× ${e.item_id} aus ${e.container_id} (${e.owner_label}), ${e.confidence}: ${e.suspects.join(", ")}`);

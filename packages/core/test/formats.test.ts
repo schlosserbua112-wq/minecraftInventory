@@ -1,7 +1,7 @@
 import { deflateSync, gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { containersFromChunk, parseSnbt, snbtFromDataGet, uuidFromInts } from "../src/index.js";
-import { readNbt, readRegionChunks } from "../src/node.js";
+import { aggregate, chestPartner, containerId, containersFromChunk, mergeDoubleChests, mergedAwayIds, paletteEntry, parseSnbt, snbtFromDataGet, uuidFromInts, type ContainerSnapshot } from "../src/index.js";
+import { containersFromRegion, readNbt, readRegionChunks } from "../src/node.js";
 
 // Kleiner NBT-Schreiber nur für Tests
 function str(s: string) { const b = Buffer.from(s, "utf8"); const l = Buffer.alloc(2); l.writeUInt16BE(b.length); return Buffer.concat([l, b]); }
@@ -178,5 +178,49 @@ describe("Weltkarte", () => {
     long.writeBigInt64BE(-0x0123456789abcdefn);
     const nbt = Buffer.concat([Buffer.from([10]), str(""), tag(12, "a", Buffer.concat([int(1), long])), Buffer.from([0])]);
     expect((readNbt(nbt, undefined, true).a as BigInt64Array)[0]).toBe(-0x0123456789abcdefn);
+  });
+});
+
+describe("Doppelkisten", () => {
+  const chest = (x: number, z: number, extra: Partial<ContainerSnapshot> = {}): ContainerSnapshot => ({
+    id: containerId("minecraft:overworld", x, 64, z), dimension: "minecraft:overworld", x, y: 64, z, kind: "chest", customName: null, items: [], ...extra,
+  });
+
+  it("findet die andere Hälfte aus type und facing", () => {
+    expect(chestPartner({ name: "minecraft:chest", properties: { facing: "west", type: "left" } }, { x: 0, y: 1, z: 17 })?.partner).toEqual({ x: 0, y: 1, z: 16 });
+    expect(chestPartner({ name: "minecraft:chest", properties: { facing: "north", type: "left" } }, { x: 0, y: 1, z: 0 })?.partner).toEqual({ x: 1, y: 1, z: 0 });
+    expect(chestPartner({ name: "minecraft:chest", properties: { facing: "north", type: "right" } }, { x: 1, y: 1, z: 0 })?.partner).toEqual({ x: 0, y: 1, z: 0 });
+    expect(chestPartner({ name: "minecraft:chest", properties: { facing: "north", type: "single" } }, { x: 0, y: 1, z: 0 })).toBeNull();
+    expect(paletteEntry("minecraft:chest[facing=east,type=right]").properties).toEqual({ facing: "east", type: "right" });
+  });
+
+  it("führt Vales Doppelkisten aus r.0.0.mca zu je einer Kiste zusammen", async () => {
+    const { readFileSync } = await import("node:fs");
+    const buf = readFileSync(new URL("./fixtures/mc-26.3/world/dimensions/minecraft/overworld/region/r.0.0.mca", import.meta.url));
+    const merged = mergeDoubleChests(containersFromRegion(buf, "minecraft:overworld")).filter((c) => c.customName === "Vale");
+    expect(merged.map((c) => c.id).sort()).toEqual(["minecraft:overworld:0:120:16", "minecraft:overworld:0:121:16"]);
+    expect(merged.find((c) => c.y === 121)!.items.map((i) => i.id)).toEqual(["minecraft:anvil"]);
+    expect(merged.flatMap(mergedAwayIds).sort()).toEqual(["minecraft:overworld:0:120:17", "minecraft:overworld:0:121:17"]);
+  });
+
+  it("nimmt den Namen der rechten Hälfte, sonst den der linken, und zählt beide Inhalte", () => {
+    const right = chest(1, 0, { half: "right", partner: { x: 0, y: 64, z: 0 }, items: [{ id: "minecraft:dirt", count: 5 }] });
+    const left = chest(0, 0, { half: "left", partner: { x: 1, y: 64, z: 0 }, customName: "Max", items: [{ id: "minecraft:dirt", count: 3 }] });
+    const [one, ...rest] = mergeDoubleChests([left, right]);
+    expect(rest).toHaveLength(0);
+    expect(one!.id).toBe(right.id);
+    expect(one!.customName).toBe("Max");
+    const result = aggregate([], [one!], "ignore", new Map([["max", "Max"]]));
+    expect(result.rows).toEqual([expect.objectContaining({ source_id: right.id, owner_key: "max", item_id: "minecraft:dirt", count: 8 })]);
+  });
+
+  it("lässt Einzelkisten und Hälften ohne Gegenstück einzeln", () => {
+    // Zwei Doppelkisten-Hälften, die nicht aufeinander zeigen (2 × 2-Block aus zwei Doppelkisten)
+    const a = chest(0, 0, { half: "left", partner: { x: 0, y: 64, z: 1 } });
+    const b = chest(1, 0, { half: "right", partner: { x: 1, y: 64, z: 1 } });
+    const lonely = chest(5, 5, { half: "left", partner: { x: 6, y: 64, z: 5 } });
+    expect(mergeDoubleChests([a, b, lonely])).toHaveLength(3);
+    const barrel = chest(0, 1, { kind: "barrel", half: "right", partner: { x: 0, y: 64, z: 0 } });
+    expect(mergeDoubleChests([a, barrel])).toHaveLength(2);
   });
 });
