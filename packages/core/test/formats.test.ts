@@ -179,6 +179,9 @@ describe("Weltkarte", () => {
     expect(tintedColor("minecraft:oak_leaves", "minecraft:jungle")).not.toEqual(tintedColor("minecraft:oak_leaves", "minecraft:savanna"));
     expect(tintedColor("minecraft:cherry_leaves", "minecraft:cherry_grove")).toEqual([229, 173, 194]);
     expect(tintedColor("minecraft:spruce_leaves", "minecraft:snowy_taiga")).toEqual(tintedColor("minecraft:spruce_leaves", "minecraft:plains"));
+    // Pappellaub im Dappled Forest: rot, orange oder gelb, nie grün
+    expect(tintedColor("minecraft:poplar_leaves|red", "minecraft:dappled_forest")).toEqual([170, 48, 36]);
+    expect(tintedColor("minecraft:poplar_leaves", "minecraft:dappled_forest")).toEqual([204, 102, 32]);
   });
 
   it("liest Long-Arrays auf Wunsch verlustfrei", () => {

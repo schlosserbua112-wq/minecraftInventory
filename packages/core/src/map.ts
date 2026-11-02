@@ -35,6 +35,8 @@ const EXACT: Record<string, Rgb> = {
 
 /** Regeln nach Namensteilen, in dieser Reihenfolge. */
 const RULES: [RegExp, Rgb][] = [
+  [/poplar_leaves\|red|red_poplar_leaves/, [170, 48, 36]], [/poplar_leaves\|yellow|yellow_poplar_leaves/, [214, 172, 42]],
+  [/poplar_leaves/, [204, 102, 32]], [/leaf_litter/, [150, 98, 46]], [/^poplar_(log|wood)$/, [190, 180, 160]], [/^poplar_/, [214, 196, 160]],
   [/cherry_leaves/, [229, 173, 194]], [/azalea_leaves|flowering_azalea/, [92, 120, 45]],
   [/spruce_leaves/, [61, 99, 61]], [/birch_leaves/, [128, 167, 85]], [/_leaves$/, [60, 120, 30]],
   [/^(oak|birch|spruce|jungle|acacia|dark_oak|mangrove|cherry|pale_oak)_(log|wood)$/, [102, 81, 51]],
@@ -104,10 +106,10 @@ const FOLIAGE: Record<string, number> = {
 };
 const WATER: Record<string, number> = {
   swamp: 0x617b64, mangrove_swamp: 0x3a7a6a, warm_ocean: 0x43d5ee, lukewarm_ocean: 0x45adf2, deep_lukewarm_ocean: 0x45adf2,
-  cold_ocean: 0x3d57d6, deep_cold_ocean: 0x3d57d6, frozen_ocean: 0x3938c9, deep_frozen_ocean: 0x3938c9, frozen_river: 0x3938c9,
+  dappled_forest: 0x1f2b2e, cold_ocean: 0x3d57d6, deep_cold_ocean: 0x3d57d6, frozen_ocean: 0x3938c9, deep_frozen_ocean: 0x3938c9, frozen_river: 0x3938c9,
 };
 /** Laub mit eigener, nicht eingefärbter Farbe (Fichte und Birke haben im Spiel feste Farben) */
-const FIXED_LEAVES = /^(spruce|birch|cherry|azalea|flowering_azalea|pale_oak)_leaves$/;
+const FIXED_LEAVES = /^(spruce|birch|cherry|azalea|flowering_azalea|pale_oak)_leaves$|poplar_leaves/;
 const tintCache = new Map<string, Rgb>();
 const rgbOf = (v: number, f: number): Rgb => [Math.round(((v >> 16) & 255) * f), Math.round(((v >> 8) & 255) * f), Math.round((v & 255) * f)];
 
@@ -155,7 +157,14 @@ function unpack(data: BigInt64Array, bits: number, count: number): Uint16Array {
 function paletteName(e: NbtValue): string {
   if (typeof e === "string") return e;
   const o = e as Record<string, NbtValue>;
-  return String(o.Name ?? o.id ?? o[""] ?? "minecraft:air");
+  const name = String(o.Name ?? o.id ?? o[""] ?? "minecraft:air");
+  // Pappellaub (Dappled Forest, 26.3) gibt es rot, orange und gelb; die Farbe steht in den Eigenschaften
+  if (name.includes("poplar_leaves")) {
+    const props = (o.Properties ?? o.properties) as Record<string, NbtValue> | undefined;
+    const color = props && Object.values(props).find((v) => typeof v === "string" && /^(red|orange|yellow)$/.test(v));
+    if (color) return `${name}|${color}`;
+  }
+  return name;
 }
 
 /** Heightmap: 256 Werte, Bitbreite ergibt sich aus der Länge (z. B. 37 Longs → 9 Bit). */
