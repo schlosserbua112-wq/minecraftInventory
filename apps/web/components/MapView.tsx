@@ -194,10 +194,18 @@ export function MapView({
     return { x: x0 + (e.clientX - r.left) * k, z: z0 + (e.clientY - r.top) * k };
   };
 
+  /** Block unter dem Mauszeiger bzw. dem letzten Tipp, null wenn der Zeiger außerhalb ist */
+  const [hover, setHover] = useState<{ x: number; z: number } | null>(null);
+  const trackHover = (e: PointerEvent) => {
+    const p = toWorld(e);
+    setHover({ x: Math.floor(p.x), z: Math.floor(p.z) });
+  };
+
   const drag = useRef<{ x: number; y: number; cx: number; cz: number; moved: boolean } | null>(null);
   /** Mittelpunkt beim Aufziehen einer Zone */
   const draw = useRef<{ x: number; z: number } | null>(null);
   const onDown = (e: PointerEvent) => {
+    trackHover(e);
     if ((e.target as Element).closest("[data-pin], [data-ui]")) return;
     (e.currentTarget as Element).setPointerCapture(e.pointerId);
     if (tool === "zone") {
@@ -210,6 +218,8 @@ export function MapView({
     drag.current = { x: e.clientX, y: e.clientY, cx: view.cx, cz: view.cz, moved: false };
   };
   const onMove = (e: PointerEvent) => {
+    // Beim Ziehen bleibt der Block unter dem Finger gleich, die Anzeige also auch
+    if (!drag.current?.moved) trackHover(e);
     const c = draw.current;
     if (c) {
       const p = toWorld(e);
@@ -311,6 +321,18 @@ export function MapView({
     return { xs, zs };
   }, [x0, z0, view.w, h]);
 
+  /** Achsenbeschriftung: runde Schritte (1, 2, 5 × 10ⁿ), etwa alle 110 Bildschirmpixel einer */
+  const ticks = useMemo(() => {
+    const raw = 110 * k;
+    const pow = 10 ** Math.floor(Math.log10(raw));
+    const step = [1, 2, 5, 10].map((m) => m * pow).find((s) => s >= raw) ?? 10 * pow;
+    const xs: number[] = [];
+    const zs: number[] = [];
+    for (let x = Math.ceil((x0 + 30 * k) / step) * step; x <= x0 + view.w - 50 * k; x += step) xs.push(x);
+    for (let z = Math.ceil((z0 + 30 * k) / step) * step; z <= z0 + h - 20 * k; z += step) zs.push(z);
+    return { xs, zs };
+  }, [k, x0, z0, view.w, h]);
+
   const regionLabels = useMemo(() => {
     const out: { x: number; z: number; text: string }[] = [];
     for (let rx = Math.floor(x0 / 512); rx * 512 <= x0 + view.w; rx++)
@@ -371,6 +393,7 @@ export function MapView({
       onPointerMove={onMove}
       onPointerUp={onUp}
       onPointerCancel={onUp}
+      onPointerLeave={(e) => e.pointerType === "mouse" && setHover(null)}
       onWheel={onWheel}
       role="application"
       aria-label="Karte der Kisten und Landmarks. Ziehen zum Verschieben, Mausrad zum Zoomen."
@@ -501,7 +524,29 @@ export function MapView({
             </g>
           );
         })}
+        {hover && k < 0.5 && (
+          <rect x={hover.x} y={hover.z} width={1} height={1} fill="#fff" fillOpacity="0.25" stroke="#fff" strokeWidth={1.5 * k} pointerEvents="none" />
+        )}
+        <g className="map-axis" pointerEvents="none" fontSize={11 * k} fill="#fff" stroke="#000" strokeOpacity="0.55" strokeWidth={3 * k} paintOrder="stroke">
+          {ticks.xs.map((x) => (
+            <g key={`tx${x}`}>
+              <line x1={x} x2={x} y1={z0} y2={z0 + 6 * k} stroke="#fff" strokeOpacity="0.8" strokeWidth={1.5 * k} />
+              <text x={x} y={z0 + 18 * k} textAnchor="middle">{x}</text>
+            </g>
+          ))}
+          {ticks.zs.map((z) => (
+            <g key={`tz${z}`}>
+              <line x1={x0} x2={x0 + 6 * k} y1={z} y2={z} stroke="#fff" strokeOpacity="0.8" strokeWidth={1.5 * k} />
+              <text x={x0 + 9 * k} y={z + 4 * k}>{z}</text>
+            </g>
+          ))}
+        </g>
       </svg>
+      <div className="map-coords" data-ui aria-live="off" title={hover ? "Block unter dem Mauszeiger" : "Mitte der Ansicht"}>
+        <span>X <b>{hover ? hover.x : Math.floor(view.cx)}</b></span>
+        <span>Z <b>{hover ? hover.z : Math.floor(view.cz)}</b></span>
+        {!hover && <span className="map-coords-note">Mitte</span>}
+      </div>
       {tool && (
         <div className="map-hint" data-ui role="status">
           <span>{tool === "landmark" ? "Klick auf die Karte, wo das Landmark hin soll." : "Am Mittelpunkt drücken und nach außen ziehen."}</span>

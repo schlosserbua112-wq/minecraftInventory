@@ -155,6 +155,9 @@ tr:last-child td { border-bottom: 0; }
 .spin { animation: spin 1.2s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+.map-coords { position: absolute; right: 10px; bottom: 10px; display: flex; align-items: baseline; gap: 10px; padding: 6px 10px; border-radius: var(--radius); background: rgba(32, 37, 31, 0.88); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; pointer-events: none; }
+.map-coords b { display: inline-block; min-width: 5ch; color: var(--text); font-weight: 600; }
+.map-coords-note { font-size: 11px; }
 .map-hint { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; max-width: calc(100% - 120px); padding: 4px 4px 4px 12px; border-radius: var(--radius); background: rgba(32, 37, 31, 0.92); font-size: 13px; }
 .map-card { position: absolute; left: 10px; top: 10px; width: min(300px, calc(100% - 70px)); display: flex; flex-direction: column; gap: 12px; padding: 14px; background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35); cursor: default; }
 .map-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -168,7 +171,7 @@ tr:last-child td { border-bottom: 0; }
 .swatch-custom { background: conic-gradient(#ff9c8a, #e9c46a, #9ee08a, #6fd0c4, #7fb3e6, #b48ce0, #ff9c8a); display: inline-block; }
 .swatch-custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
 .place-dot { width: 10px; height: 10px; flex: 0 0 10px; margin: 0 6px; border-radius: 1px; transform: rotate(45deg); }
-.map-legend { position: absolute; left: 10px; bottom: 10px; display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 6px 10px; border-radius: var(--radius); background: rgba(32, 37, 31, 0.88); font-size: 12px; color: var(--muted); }
+.map-legend { position: absolute; left: 10px; bottom: 10px; max-width: calc(100% - 170px); display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 6px 10px; border-radius: var(--radius); background: rgba(32, 37, 31, 0.88); font-size: 12px; color: var(--muted); }
 
 /* Projekte */
 .proj-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
