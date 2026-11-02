@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent, type WheelEvent } from "react";
-import { regionsForZone, type OwnerType } from "@mc/core";
+import { biomeName, regionsForZone, type OwnerType } from "@mc/core";
 import { useData } from "@/lib/data";
 import { OWNER_COLOR, OWNER_LABEL, chestHeading } from "@/lib/derive";
 import type { ContainerRow, LandmarkRow, ZoneRow } from "@/lib/types";
@@ -332,11 +332,11 @@ export function MapView({
     for (const l of biomes.layer.labels) {
       if (Math.sqrt(l.area) / k < 56) break; // nach Fläche sortiert: alle weiteren sind noch kleiner
       if (l.x < x0 || l.x > x0 + view.w || l.z < z0 || l.z > z0 + h) continue;
-      const w = (l.name.length * 6.6 + 16) * k;
+      const w = (biomeName(l.id).length * 6.6 + 16) * k;
       const box = { x1: l.x - w / 2 - 4 * k, z1: l.z - tagH / 2 - 4 * k, x2: l.x + w / 2 + 4 * k, z2: l.z + tagH / 2 + 4 * k };
       if (placed.some((p) => p.x1 < box.x2 && box.x1 < p.x2 && p.z1 < box.z2 && box.z1 < p.z2)) continue;
       placed.push(box);
-      out.push({ key: `${l.x},${l.z}`, name: l.name, x: l.x, z: l.z, w });
+      out.push({ key: `${l.x},${l.z}`, name: biomeName(l.id), x: l.x, z: l.z, w });
       if (out.length >= 80) break;
     }
     return out;

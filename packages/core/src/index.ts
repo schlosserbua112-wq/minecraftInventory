@@ -11,3 +11,4 @@ export * from "./world.js";
 export * from "./chests.js";
 export * from "./takes.js";
 export * from "./stats.js";
+export * from "./biomenames.js";

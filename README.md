@@ -23,7 +23,7 @@ Private Kiste: Unter „Konto“ macht jeder höchstens eine seiner Kisten priva
 
 Meine Items: Der Tab zeigt jedem sein Inventar, seine Enderkiste und seine Kisten mit Inhalt. Eigene Kisten lassen sich dort umbenennen. Der neue Name gilt nur auf der Website (Tabelle `container_labels`, Migration `20261031000100_container_labels.sql`); im Spiel und für die Zuordnung zählt weiter der Amboss-Name.
 
-Biome auf der Karte: Beim Zeichnen der Weltkarte liest der Sammler aus den Region-Dateien das Biom an der Oberfläche (je 4 × 4 Blöcke), glättet es, schlägt Flüsse und Strände dem Nachbarbiom zu und legt Grenzlinien und ein Namensschild je Fläche als `overworld/biomes.json` in den Bucket „map“. Auf der Website schaltet der Knopf „Biome einblenden“ die Ebene an und aus; Schilder erscheinen nur für Flächen, die beim aktuellen Zoom groß genug sind.
+Biome auf der Karte: Beim Zeichnen der Weltkarte liest der Sammler aus den Region-Dateien das Biom an der Oberfläche (je 4 × 4 Blöcke), glättet es, schlägt Flüsse und Strände dem Nachbarbiom zu und legt Grenzlinien und ein Namensschild je Fläche (englische Namen wie im Spiel) als `overworld/biomes.json` in den Bucket „map“. Auf der Website schaltet der Knopf „Biome einblenden“ die Ebene an und aus; Schilder erscheinen nur für Flächen, die beim aktuellen Zoom groß genug sind.
 
 ## Entnahmen aus fremden Kisten
 
