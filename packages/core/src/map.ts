@@ -69,6 +69,67 @@ export function blockColor(name: string): Rgb {
 /** Biom-Zelle ohne Daten (Chunk nicht generiert). */
 export const NO_BIOME = 255;
 
+/** Block an (x, y, z) innerhalb eines entpackten Abschnitts */
+function blockAt(s: { palette: string[]; idx: Uint16Array | null }, x: number, y: number, z: number): string {
+  return s.palette.length ? s.palette[s.idx ? s.idx[((y & 15) * 16 + z) * 16 + x]! : 0] ?? "minecraft:air" : "minecraft:air";
+}
+
+/**
+ * Gras, Laub und Wasser färbt Minecraft je Biom ein (Farbtabellen im Spiel). Werte wie im Spiel,
+ * ohne "minecraft:"; fehlt ein Biom, gilt die Ebene.
+ */
+const GRASS: Record<string, number> = {
+  plains: 0x91bd59, sunflower_plains: 0x91bd59, meadow: 0x83bb6d, cherry_grove: 0xb6db61, forest: 0x79c05a, flower_forest: 0x79c05a,
+  birch_forest: 0x88bb67, old_growth_birch_forest: 0x88bb67, dark_forest: 0x507a32, pale_garden: 0x778272, taiga: 0x86b783,
+  old_growth_pine_taiga: 0x86b87f, old_growth_spruce_taiga: 0x86b783, snowy_taiga: 0x80b497, snowy_plains: 0x80b497,
+  ice_spikes: 0x80b497, grove: 0x80b497, snowy_slopes: 0x80b497, frozen_peaks: 0x80b497, jagged_peaks: 0x80b497,
+  snowy_beach: 0x80b497, frozen_river: 0x80b497, frozen_ocean: 0x80b497, deep_frozen_ocean: 0x80b497, stony_peaks: 0x9abe4b,
+  windswept_hills: 0x8ab689, windswept_gravelly_hills: 0x8ab689, windswept_forest: 0x8ab689, stony_shore: 0x8ab689,
+  swamp: 0x6a7039, mangrove_swamp: 0x6a7039, jungle: 0x59c93c, bamboo_jungle: 0x59c93c, sparse_jungle: 0x64c73f,
+  desert: 0xbfb755, savanna: 0xbfb755, savanna_plateau: 0xbfb755, windswept_savanna: 0xbfb755, badlands: 0x90814d,
+  eroded_badlands: 0x90814d, wooded_badlands: 0x90814d, mushroom_fields: 0x55c93f, beach: 0x91bd59, river: 0x8eb971,
+  ocean: 0x8eb971, deep_ocean: 0x8eb971, lukewarm_ocean: 0x8eb971, deep_lukewarm_ocean: 0x8eb971, warm_ocean: 0x8eb971,
+  cold_ocean: 0x8eb971, deep_cold_ocean: 0x8eb971,
+};
+const FOLIAGE: Record<string, number> = {
+  plains: 0x77ab2f, sunflower_plains: 0x77ab2f, meadow: 0x63a948, cherry_grove: 0xb6db61, forest: 0x59ae30, flower_forest: 0x59ae30,
+  birch_forest: 0x6ba941, old_growth_birch_forest: 0x6ba941, dark_forest: 0x59ae30, pale_garden: 0x878d76, taiga: 0x68a464,
+  old_growth_pine_taiga: 0x68a55f, old_growth_spruce_taiga: 0x68a464, snowy_taiga: 0x60a17b, snowy_plains: 0x60a17b,
+  ice_spikes: 0x60a17b, grove: 0x60a17b, snowy_slopes: 0x60a17b, frozen_peaks: 0x60a17b, jagged_peaks: 0x60a17b,
+  snowy_beach: 0x60a17b, frozen_river: 0x60a17b, frozen_ocean: 0x60a17b, stony_peaks: 0x82ac1e, windswept_hills: 0x6da36b,
+  windswept_gravelly_hills: 0x6da36b, windswept_forest: 0x6da36b, stony_shore: 0x6da36b, swamp: 0x6a7039, mangrove_swamp: 0x8db127,
+  jungle: 0x30bb0b, bamboo_jungle: 0x30bb0b, sparse_jungle: 0x3eb80f, desert: 0xaea42a, savanna: 0xaea42a, savanna_plateau: 0xaea42a,
+  windswept_savanna: 0xaea42a, badlands: 0x9e814d, eroded_badlands: 0x9e814d, wooded_badlands: 0x9e814d, mushroom_fields: 0x2bbb0f,
+  beach: 0x77ab2f, river: 0x71a74d, ocean: 0x71a74d,
+};
+const WATER: Record<string, number> = {
+  swamp: 0x617b64, mangrove_swamp: 0x3a7a6a, warm_ocean: 0x43d5ee, lukewarm_ocean: 0x45adf2, deep_lukewarm_ocean: 0x45adf2,
+  cold_ocean: 0x3d57d6, deep_cold_ocean: 0x3d57d6, frozen_ocean: 0x3938c9, deep_frozen_ocean: 0x3938c9, frozen_river: 0x3938c9,
+};
+/** Laub mit eigener, nicht eingefärbter Farbe (Fichte und Birke haben im Spiel feste Farben) */
+const FIXED_LEAVES = /^(spruce|birch|cherry|azalea|flowering_azalea|pale_oak)_leaves$/;
+const tintCache = new Map<string, Rgb>();
+const rgbOf = (v: number, f: number): Rgb => [Math.round(((v >> 16) & 255) * f), Math.round(((v >> 8) & 255) * f), Math.round((v & 255) * f)];
+
+/** Blockfarbe mit Biom-Färbung für Gras, Laub, Ranken und Wasser */
+export function tintedColor(name: string, biome: string | undefined): Rgb {
+  const id = name.startsWith("minecraft:") ? name.slice(10) : name;
+  const b = biome?.startsWith("minecraft:") ? biome.slice(10) : biome ?? "plains";
+  let kind: "grass" | "foliage" | "water" | null = null;
+  if (id === "grass_block" || id === "short_grass" || id === "tall_grass" || id === "fern" || id === "large_fern") kind = "grass";
+  else if ((id.endsWith("_leaves") && !FIXED_LEAVES.test(id)) || id === "vine") kind = "foliage";
+  else if (id === "water" || id === "bubble_column") kind = "water";
+  if (!kind) return blockColor(name);
+  const key = `${kind}|${b}`;
+  let c = tintCache.get(key);
+  if (!c) {
+    // Gras und Laub etwas abdunkeln, damit sie zu den übrigen Kartenfarben passen
+    c = kind === "grass" ? rgbOf(GRASS[b] ?? GRASS.plains!, 0.78) : kind === "foliage" ? rgbOf(FOLIAGE[b] ?? FOLIAGE.plains!, 0.8) : WATER[b] ? rgbOf(WATER[b]!, 1) : blockColor(name);
+    tintCache.set(key, c);
+  }
+  return c;
+}
+
 const isWater = (name: string) => /water|bubble_column|kelp|seagrass|sea_pickle/.test(name);
 
 /** Gepackte Werte aus einem Long-Array (Einträge überspannen keine Long-Grenzen, ab 1.16). */
@@ -133,6 +194,7 @@ export function renderRegionMap(buf: Buffer, onError?: (index: number, err: unkn
     const top = heightmap(hm?.MOTION_BLOCKING) ?? heightmap(hm?.WORLD_SURFACE);
     if (!top) continue;
     const floor = heightmap(hm?.OCEAN_FLOOR);
+    const surface = heightmap(hm?.WORLD_SURFACE);
     const minY = Number(chunk.yPos ?? -4) * 16;
     const cx = ((Number(chunk.xPos) % 32) + 32) % 32;
     const cz = ((Number(chunk.zPos) % 32) + 32) % 32;
@@ -172,24 +234,29 @@ export function renderRegionMap(buf: Buffer, onError?: (index: number, err: unkn
         if (h === 0) continue;
         const y = minY + h - 1;
         const s = section(Math.floor(y / 16));
-        const name = s.palette.length ? s.palette[s.idx ? s.idx[((y & 15) * 16 + z) * 16 + x]! : 0] ?? "minecraft:air" : "minecraft:air";
+        const name = blockAt(s, x, y, z);
         const p = (cz * 16 + z) * N + cx * 16 + x;
         height[p] = y;
-        const c = blockColor(name);
+        const b = biomeSection(Math.floor(y / 16));
+        const biome = b.palette.length ? b.palette[b.idx ? b.idx[((y & 15) >> 2) * 16 + (z >> 2) * 4 + (x >> 2)]! : 0] : undefined;
+        // Schneedecke liegt nicht in MOTION_BLOCKING (keine Kollision), steht aber in WORLD_SURFACE
+        let shown = name;
+        const w = surface?.[i] ?? 0;
+        if (w > h) {
+          const wy = minY + w - 1;
+          if (/^(minecraft:)?snow$/.test(blockAt(section(Math.floor(wy / 16)), x, wy, z))) shown = "minecraft:snow";
+        }
+        const c = tintedColor(shown, biome);
         rgb[p * 3] = c[0]; rgb[p * 3 + 1] = c[1]; rgb[p * 3 + 2] = c[2];
         if (floor && isWater(name)) depth[p] = Math.min(255, Math.max(1, h - floor[i]!));
         // Biom der 4 × 4-Zelle an der Oberfläche, gemessen an einer Spalte nahe der Zellmitte
-        if ((x & 3) === 1 && (z & 3) === 1) {
-          const b = biomeSection(Math.floor(y / 16));
-          const biome = b.palette.length ? b.palette[b.idx ? b.idx[((y & 15) >> 2) * 16 + (z >> 2) * 4 + (x >> 2)]! : 0] : undefined;
-          if (biome) {
-            let id = biomeIds.get(biome);
-            if (id === undefined && biomePalette.length < NO_BIOME) {
-              id = biomePalette.push(biome) - 1;
-              biomeIds.set(biome, id);
-            }
-            if (id !== undefined) biomeCells[(cz * 4 + (z >> 2)) * 128 + cx * 4 + (x >> 2)] = id;
+        if (biome && (x & 3) === 1 && (z & 3) === 1) {
+          let id = biomeIds.get(biome);
+          if (id === undefined && biomePalette.length < NO_BIOME) {
+            id = biomePalette.push(biome) - 1;
+            biomeIds.set(biome, id);
           }
+          if (id !== undefined) biomeCells[(cz * 4 + (z >> 2)) * 128 + cx * 4 + (x >> 2)] = id;
         }
       }
     }
