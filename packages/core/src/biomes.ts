@@ -1,3 +1,4 @@
+import { biomeName } from "./biomenames.js";
 import { NO_BIOME } from "./map.js";
 
 /**
@@ -5,29 +6,6 @@ import { NO_BIOME } from "./map.js";
  * (4 × 4 Blöcke je Zelle), `BiomeAtlas.build()` glättet sie über alle Regionen hinweg und liefert
  * Grenzlinien und ein Namensschild je zusammenhängender Biomfläche.
  */
-
-/** Deutsche Namen wie im Spiel (Sprache Deutsch), ohne "minecraft:". */
-export const BIOME_NAMES: Record<string, string> = {
-  plains: "Ebene", sunflower_plains: "Sonnenblumenebene", snowy_plains: "Verschneite Ebene", ice_spikes: "Eiszapfentundra",
-  desert: "Wüste", swamp: "Sumpf", mangrove_swamp: "Mangrovensumpf", forest: "Wald", flower_forest: "Blumenwald",
-  birch_forest: "Birkenwald", dark_forest: "Dichter Wald", pale_garden: "Blasser Garten", old_growth_birch_forest: "Birkenurwald",
-  old_growth_pine_taiga: "Kiefernurtaiga", old_growth_spruce_taiga: "Fichtenurtaiga", taiga: "Taiga", snowy_taiga: "Verschneite Taiga",
-  savanna: "Savanne", savanna_plateau: "Savannenhochebene", windswept_hills: "Windgepeitschte Hügel",
-  windswept_gravelly_hills: "Windgepeitschte Geröllhügel", windswept_forest: "Windgepeitschter Wald",
-  windswept_savanna: "Windgepeitschte Savanne", jungle: "Dschungel", sparse_jungle: "Lichter Dschungel", bamboo_jungle: "Bambusdschungel",
-  badlands: "Tafelberge", eroded_badlands: "Abgetragene Tafelberge", wooded_badlands: "Tafelbergwald", meadow: "Wiese",
-  cherry_grove: "Kirschblütenhain", grove: "Hain", snowy_slopes: "Verschneite Hänge", frozen_peaks: "Vereiste Gipfel",
-  jagged_peaks: "Zerklüftete Gipfel", stony_peaks: "Steinige Gipfel", river: "Fluss", frozen_river: "Vereister Fluss",
-  beach: "Strand", snowy_beach: "Verschneiter Strand", stony_shore: "Steinküste", warm_ocean: "Warmer Ozean",
-  lukewarm_ocean: "Lauwarmer Ozean", deep_lukewarm_ocean: "Lauwarme Tiefsee", ocean: "Ozean", deep_ocean: "Tiefsee",
-  cold_ocean: "Kalter Ozean", deep_cold_ocean: "Kalte Tiefsee", frozen_ocean: "Vereister Ozean", deep_frozen_ocean: "Vereiste Tiefsee",
-  mushroom_fields: "Pilzland", dripstone_caves: "Tropfsteinhöhlen", lush_caves: "Üppige Höhlen", deep_dark: "Tiefes Dunkel",
-};
-
-export function biomeName(id: string): string {
-  const key = id.startsWith("minecraft:") ? id.slice(10) : id;
-  return BIOME_NAMES[key] ?? key.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase());
-}
 
 /** Schmale Biome, die keine eigene Fläche bilden, sondern den Nachbarn zugeschlagen werden. */
 const FOLD = new Set(["minecraft:river", "minecraft:frozen_river", "minecraft:beach", "minecraft:snowy_beach"]);
