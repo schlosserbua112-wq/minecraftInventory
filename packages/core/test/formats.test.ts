@@ -173,6 +173,14 @@ describe("Weltkarte", () => {
     for (const l of layer.lines) expect(l.length % 2).toBe(0);
   });
 
+  it("färbt Gras und Laub je Biom, Fichte und Kirsche bleiben fest", async () => {
+    const { tintedColor } = await import("../src/node.js");
+    expect(tintedColor("minecraft:grass_block", "minecraft:snowy_plains")).not.toEqual(tintedColor("minecraft:grass_block", "minecraft:plains"));
+    expect(tintedColor("minecraft:oak_leaves", "minecraft:jungle")).not.toEqual(tintedColor("minecraft:oak_leaves", "minecraft:savanna"));
+    expect(tintedColor("minecraft:cherry_leaves", "minecraft:cherry_grove")).toEqual([229, 173, 194]);
+    expect(tintedColor("minecraft:spruce_leaves", "minecraft:snowy_taiga")).toEqual(tintedColor("minecraft:spruce_leaves", "minecraft:plains"));
+  });
+
   it("liest Long-Arrays auf Wunsch verlustfrei", () => {
     const long = Buffer.alloc(8);
     long.writeBigInt64BE(-0x0123456789abcdefn);
