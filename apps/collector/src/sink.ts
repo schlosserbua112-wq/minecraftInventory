@@ -52,6 +52,10 @@ export interface Zone {
   radius: number;
 }
 
+/** Kisten, die so lange nicht mehr gesehen wurden, gelten als abgebaut. */
+const STALE_CONTAINER_MS = 24 * 60 * 60_000;
+const STALE_CLEANUP_EVERY_MS = 10 * 60_000;
+
 const key = (r: Pick<StockRow, "source_kind" | "source_id" | "item_id">) => `${r.source_kind}|${r.source_id}|${r.item_id}`;
 
 /** Schreibt nach Supabase und schickt nur Änderungen seit dem letzten Lauf. */
@@ -61,6 +65,7 @@ export class SupabaseSink implements Sink {
   private lastHistorySlot = "";
   /** Unbenannte Kisten aus dem letzten Lauf, um verschwundene aus `containers` zu löschen. */
   private lastUnnamed: string | null = null;
+  private lastStaleCleanup = 0;
 
   constructor(url: string, serviceKey: string) {
     this.db = createClient(url, serviceKey, { auth: { persistSession: false } });
@@ -106,6 +111,16 @@ export class SupabaseSink implements Sink {
       if (unnamedIds.length) q = q.not("id", "in", `(${unnamedIds.map((id) => `"${id}"`).join(",")})`);
       await this.check(q);
       this.lastUnnamed = unnamedKey;
+    }
+
+    // Abgebaute Kisten: der Sammler sieht sie nicht mehr, also wird last_seen_at nicht mehr erneuert.
+    // Erst nach einem Tag löschen, damit ein Neustart oder ein fehlgeschlagener Vollscan nichts wegwirft.
+    if (Date.now() - this.lastStaleCleanup >= STALE_CLEANUP_EVERY_MS) {
+      const cutoff = new Date(Date.now() - STALE_CONTAINER_MS).toISOString();
+      const { data, error } = await this.db.from("containers").delete().lt("last_seen_at", cutoff).select("id");
+      if (error) throw error;
+      if (data?.length) console.log(`[sink] ${data.length} verschwundene Kisten entfernt: ${data.map((r) => r.id).join(", ")}`);
+      this.lastStaleCleanup = Date.now();
     }
 
     const next = new Map(result.rows.map((r) => [key(r), r]));
