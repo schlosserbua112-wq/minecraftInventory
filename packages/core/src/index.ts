@@ -12,3 +12,4 @@ export * from "./chests.js";
 export * from "./takes.js";
 export * from "./stats.js";
 export * from "./biomenames.js";
+export * from "./recipes.js";

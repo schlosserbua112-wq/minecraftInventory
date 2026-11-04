@@ -192,6 +192,12 @@ td .qty-input { min-height: 32px; padding: 4px 8px; }
 .have-sub { font-size: 12px; }
 .missing { color: var(--down); font-weight: 600; }
 .complete { color: var(--up); }
+.craftable { color: var(--accent); font-weight: 500; }
+.craft-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 4px; font-size: 12px; }
+.craft-tag { color: var(--accent); font-weight: 500; }
+.uses { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; }
+.use { display: inline-flex; align-items: center; gap: 4px; min-height: 24px; padding: 0 6px; margin: 0 -2px; border: 0; border-radius: var(--radius); background: transparent; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; text-decoration: underline dotted var(--line-strong); text-underline-offset: 3px; }
+.use:hover { background: var(--raised); color: var(--text); }
 .proj-map { display: flex; flex-direction: column; height: 520px; }
 .proj-map .map { min-height: 0; border: 0; border-radius: 0 0 var(--radius) var(--radius); }
 
