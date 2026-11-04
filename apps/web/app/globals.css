@@ -192,6 +192,17 @@ td .qty-input { min-height: 32px; padding: 4px 8px; }
 .have-sub { font-size: 12px; }
 .missing { color: var(--down); font-weight: 600; }
 .complete { color: var(--up); }
+.craftable { color: var(--accent); font-weight: 500; }
+.craft-from { display: flex; justify-content: flex-end; gap: 4px; font-size: 12px; color: var(--faint); margin-top: 2px; }
+.craft-from .use-name { display: none; }
+.uses { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.use { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.craft-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin-top: 4px; font-size: 12px; }
+.craft-tag { color: var(--accent); font-weight: 500; }
+.proj-table tr.row-open td { border-bottom-color: transparent; }
+.craft-detail td { background: var(--sunken); padding-top: 8px; padding-bottom: 10px; }
+.craft-detail td > .faint { margin-right: 10px; font-size: 12px; }
+.craft-total { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 12px 16px; border-top: 1px solid var(--line); font-size: 12px; }
 .proj-map { display: flex; flex-direction: column; height: 520px; }
 .proj-map .map { min-height: 0; border: 0; border-radius: 0 0 var(--radius) var(--radius); }
 

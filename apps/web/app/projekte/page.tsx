@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { ItemIcon } from "@/components/ItemIcon";
 import { ItemPicker } from "@/components/ItemPicker";
 import { Loading } from "@/components/Loading";
@@ -10,6 +10,7 @@ import { coords, kindLabel } from "@/lib/derive";
 import { fmt, itemName } from "@/lib/items";
 import { knownItemIds, useItemNames } from "@/lib/itemicons";
 import type { ContainerRow, Project, Snapshot } from "@/lib/types";
+import { planProject, type CraftPlan } from "@mc/core";
 
 const COLOR_DIRECT = "var(--accent)";
 const COLOR_OWNER = "var(--own-project)";
@@ -39,9 +40,37 @@ function projectStock(s: Snapshot, p: Project) {
   return { have, inInventory, chests: ids.size, counted };
 }
 
+/** Bestand plus Crafting (Werkbank, Steinsäge): jedes Material zählt nur einmal. */
+function projectPlan(s: Snapshot, p: Project) {
+  const stock = projectStock(s, p);
+  return { ...stock, plans: planProject(p.items, stock.have) };
+}
+
 function missingOf(s: Snapshot, p: Project) {
-  const { have } = projectStock(s, p);
-  return p.items.filter((i) => (have.get(i.item_id) ?? 0) < i.quantity).length;
+  return projectPlan(s, p).plans.filter((x) => x.missing > 0).length;
+}
+
+type Design = "a" | "b" | "c";
+const designOf = (): Design => {
+  const d = typeof location === "undefined" ? null : new URLSearchParams(location.search).get("entwurf");
+  return d === "b" || d === "c" ? d : "a";
+};
+
+/** „aus 3 Eichenstamm, 2 Kohle“ mit Icons */
+function Uses({ uses, max = 3 }: { uses: CraftPlan["uses"]; max?: number }) {
+  const shown = uses.slice(0, max);
+  return (
+    <span className="uses">
+      {shown.map((u) => (
+        <span key={u.item_id} className="use" title={itemName(u.item_id)}>
+          <ItemIcon id={u.item_id} size={14} />
+          <span className="num">{fmt.format(u.count)}</span>
+          <span className="use-name">{itemName(u.item_id)}</span>
+        </span>
+      ))}
+      {uses.length > max && <span className="faint">+{uses.length - max}</span>}
+    </span>
+  );
 }
 
 /** Projekte: benötigte Items, Kisten und Spieler, deren Bestand zählt, und was noch fehlt. Für alle sichtbar. */
@@ -223,7 +252,10 @@ function ProjectDetail({
   const [qty, setQty] = useState("64");
   useEffect(() => setName(project.name), [project.name]);
 
-  const { have, inInventory, chests, counted } = projectStock(snapshot, project);
+  const { have, inInventory, chests, counted, plans } = projectPlan(snapshot, project);
+  const design = designOf();
+  const [crafting, setCrafting] = useState(true);
+  const [open_, setOpen] = useState<string | null>(null);
   const namesVersion = useItemNames(); // Item-Liste kommt nachgeladen dazu
   const options = useMemo(() => [...new Set([...snapshot.stock.map((r) => r.item_id), ...knownItemIds()])], [snapshot.stock, namesVersion]);
   const taken = project.items.map((i) => i.item_id);
@@ -245,11 +277,17 @@ function ProjectDetail({
 
   const byId = new Map(snapshot.containers.map((c) => [c.id, c]));
   const direct = new Set(project.containers);
-  const rows = project.items.map((i) => {
+  const rows = project.items.map((i, n) => {
     const h = have.get(i.item_id) ?? 0;
-    return { ...i, have: h, inv: inInventory.get(i.item_id) ?? 0, missing: Math.max(i.quantity - h, 0) };
+    const plan = plans[n];
+    const craft = design === "c" && !crafting ? 0 : plan.craftable;
+    return { ...i, have: h, inv: inInventory.get(i.item_id) ?? 0, craftable: craft, uses: craft ? plan.uses : [], missing: Math.max(i.quantity - h, 0) - craft };
   });
   const open = rows.filter((r) => r.missing > 0).length;
+  const crafted = rows.filter((r) => r.craftable > 0).length;
+  const totalUses = new Map<string, number>();
+  for (const r of rows) for (const u of r.uses) totalUses.set(u.item_id, (totalUses.get(u.item_id) ?? 0) + u.count);
+  const rank = (r: (typeof rows)[number]) => (r.missing > 0 ? 2 : r.craftable > 0 ? 1 : 0);
 
   const pins: MapPin[] = snapshot.containers.map((c) => {
     const inDirect = direct.has(c.id);
@@ -283,14 +321,23 @@ function ProjectDetail({
         <label className="sr-only" htmlFor="project-name">Name des Projekts</label>
         <input id="project-name" className="input proj-name" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} onBlur={rename} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
         <span className="muted">
-          {rows.length === 0 ? "Noch keine Items" : open ? `${open} von ${rows.length} Items fehlen noch` : "Alles beisammen"} · {chests} {chests === 1 ? "Kiste zählt" : "Kisten zählen"} + Inventare
+          {rows.length === 0 ? "Noch keine Items" : open ? `${open} von ${rows.length} Items fehlen noch` : crafted ? "Alles beisammen, teils per Crafting" : "Alles beisammen"} · {chests} {chests === 1 ? "Kiste zählt" : "Kisten zählen"} + Inventare
         </span>
         <span className="spacer" />
         {canDelete && <button type="button" className="btn btn-quiet btn-danger" onClick={onDelete}>Projekt löschen</button>}
       </div>
 
       <div className="panel">
-        <div className="panel-head"><h2>Bedarf</h2><span className="faint">fehlende Items zuerst</span></div>
+        <div className="panel-head">
+          <h2>Bedarf</h2>
+          <span className="faint">fehlende Items zuerst{crafted > 0 && design !== "c" ? `, ${crafted} per Crafting gedeckt` : ""}</span>
+          {design === "c" && (
+            <>
+              <span className="spacer" />
+              <button type="button" className="chip" aria-pressed={crafting} onClick={() => setCrafting(!crafting)}>Crafting einrechnen</button>
+            </>
+          )}
+        </div>
         <form className="proj-add" onSubmit={add}>
           {pending ? (
             <span className="row" style={{ gap: 10, flex: "1 1 240px", maxWidth: 420, flexWrap: "nowrap", minHeight: 40 }}>
@@ -315,19 +362,28 @@ function ProjectDetail({
                   <th>Item</th>
                   <th className="r">Benötigt</th>
                   <th className="r col-have">Vorhanden</th>
+                  {design === "a" && <th className="r col-have">Craftbar</th>}
                   <th className="r">Fehlt</th>
                   <th><span className="sr-only">Aktionen</span></th>
                 </tr>
               </thead>
               <tbody>
-                {[...rows].sort((a, b) => Number(b.missing > 0) - Number(a.missing > 0)).map((r) => (
-                  <tr key={r.item_id}>
+                {[...rows].sort((a, b) => rank(b) - rank(a)).map((r) => (
+                  <Fragment key={r.item_id}>
+                  <tr className={design === "c" && open_ === r.item_id ? "row-open" : undefined}>
                     <td>
                       <span className="row" style={{ gap: 10, flexWrap: "nowrap" }}>
                         <ItemIcon id={r.item_id} size={18} />
                         <span style={{ display: "flex", flexDirection: "column" }}>
                           {itemName(r.item_id)}
-                          <span className="have-sub faint">{fmt.format(r.have)} vorhanden</span>
+                          <span className="have-sub faint">{fmt.format(r.have)} vorhanden{r.craftable > 0 && `, ${fmt.format(r.craftable)} craftbar`}</span>
+                          {design === "b" && r.craftable > 0 && (
+                            <span className="craft-line">
+                              <span className="craft-tag">+{fmt.format(r.craftable)} craftbar</span>
+                              <span className="faint">aus</span>
+                              <Uses uses={r.uses} />
+                            </span>
+                          )}
                         </span>
                       </span>
                     </td>
@@ -338,16 +394,57 @@ function ProjectDetail({
                       {fmt.format(r.have)}
                       {r.inv > 0 && <span className="faint" style={{ display: "block", fontSize: 12 }}>davon {fmt.format(r.inv)} im Inventar</span>}
                     </td>
-                    <td className="r">{r.missing ? <span className="missing">{fmt.format(r.missing)}</span> : <span className="complete">fertig</span>}</td>
+                    {design === "a" && (
+                      <td className="r col-have">
+                        {r.craftable > 0 ? (
+                          <>
+                            <span className="craftable">+{fmt.format(r.craftable)}</span>
+                            <span className="craft-from">aus <Uses uses={r.uses} max={2} /></span>
+                          </>
+                        ) : (
+                          <span className="faint">–</span>
+                        )}
+                      </td>
+                    )}
+                    <td className="r">
+                      {r.missing > 0 ? (
+                        <span className="missing">{fmt.format(r.missing)}</span>
+                      ) : r.craftable > 0 ? (
+                        design === "c" ? (
+                          <button type="button" className="btn btn-quiet btn-small craftable" aria-expanded={open_ === r.item_id} onClick={() => setOpen(open_ === r.item_id ? null : r.item_id)}>
+                            craftbar {open_ === r.item_id ? "▴" : "▾"}
+                          </button>
+                        ) : (
+                          <span className="craftable">{design === "a" ? "mit Crafting" : "craftbar"}</span>
+                        )
+                      ) : (
+                        <span className="complete">fertig</span>
+                      )}
+                    </td>
                     <td className="r" style={{ width: 1 }}>
                       <button type="button" className="btn btn-quiet btn-small" aria-label={`${itemName(r.item_id)} entfernen`} title="Entfernen" onClick={() => onItem(r.item_id, 0)}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
                       </button>
                     </td>
                   </tr>
+                  {design === "c" && open_ === r.item_id && (
+                    <tr className="craft-detail">
+                      <td colSpan={5}>
+                        <span className="faint">{fmt.format(r.craftable)} Stück an Werkbank oder Steinsäge aus</span>
+                        <Uses uses={r.uses} max={8} />
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
+            {design === "c" && crafting && totalUses.size > 0 && (
+              <div className="craft-total">
+                <span className="faint">Fürs Craften eingeplant, zählt nicht doppelt:</span>
+                <Uses uses={[...totalUses].map(([item_id, count]) => ({ item_id, count })).sort((a, b) => b.count - a.count)} max={10} />
+              </div>
+            )}
           </div>
         )}
       </div>
