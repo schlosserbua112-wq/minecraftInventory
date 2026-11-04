@@ -19,7 +19,7 @@ const chestName = (c: ContainerRow) => c.label ?? c.custom_name ?? `${kindLabel(
 
 /**
  * Bestand je Item: Kisten des Projekts (einzeln gewählte und alle Kisten der gewählten Spieler)
- * plus die Inventare aller Spieler. Private Inventare sieht nur, wer sie sehen darf.
+ * plus die Inventare der gewählten Spieler. Private Inventare sieht nur, wer sie sehen darf.
  */
 function projectStock(s: Snapshot, p: Project) {
   const direct = new Set(p.containers);
@@ -31,7 +31,7 @@ function projectStock(s: Snapshot, p: Project) {
   const add = (m: Map<string, number>, id: string, n: number) => m.set(id, (m.get(id) ?? 0) + n);
   for (const r of s.stock) {
     if (r.source_kind === "container" && ids.has(r.source_id)) add(have, r.item_id, r.count);
-    else if (r.source_kind === "inventory") {
+    else if (r.source_kind === "inventory" && r.owner_type === "player" && owners.has(r.owner_key)) {
       add(have, r.item_id, r.count);
       add(inInventory, r.item_id, r.count);
     }
@@ -126,7 +126,7 @@ export default function ProjectsPage() {
     <main className="split">
       <section className="side" aria-label="Projekte">
         <h1>Projekte</h1>
-        <p className="muted" style={{ margin: 0 }}>Was ein Bauprojekt braucht und was davon schon in seinen Kisten und den Inventaren der Spieler liegt. Alle sehen und bearbeiten dieselben Projekte.</p>
+        <p className="muted" style={{ margin: 0 }}>Was ein Bauprojekt braucht und was davon schon in seinen Kisten und den Inventaren der gewählten Spieler liegt. Alle sehen und bearbeiten dieselben Projekte.</p>
         <form className="row" style={{ gap: 8, flexWrap: "nowrap" }} onSubmit={create}>
           <label className="sr-only" htmlFor="new-project">Name des neuen Projekts</label>
           <input id="new-project" className="input" style={{ flex: "1 1 auto", minWidth: 0 }} placeholder="Neues Projekt, z. B. Burg" maxLength={60} value={newName} onChange={(e) => setNewName(e.target.value)} />
@@ -237,9 +237,11 @@ function ProjectDetail({
       e.chests++;
       m.set(c.owner_key, e);
     }
+    // Auch Spieler ohne eigene Kisten: ihr Inventar kann zählen
+    for (const r of snapshot.stock) if (r.source_kind === "inventory" && r.owner_type === "player" && !m.has(r.owner_key)) m.set(r.owner_key, { label: r.owner_label, chests: 0 });
     for (const k of project.owners) if (!m.has(k)) m.set(k, { label: k, chests: 0 });
     return [...m].sort((a, b) => a[1].label.localeCompare(b[1].label));
-  }, [snapshot.containers, project.owners]);
+  }, [snapshot.containers, snapshot.stock, project.owners]);
 
   const byId = new Map(snapshot.containers.map((c) => [c.id, c]));
   const direct = new Set(project.containers);
@@ -281,7 +283,7 @@ function ProjectDetail({
         <label className="sr-only" htmlFor="project-name">Name des Projekts</label>
         <input id="project-name" className="input proj-name" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} onBlur={rename} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
         <span className="muted">
-          {rows.length === 0 ? "Noch keine Items" : open ? `${open} von ${rows.length} Items fehlen noch` : "Alles beisammen"} · {chests} {chests === 1 ? "Kiste zählt" : "Kisten zählen"} + alle Inventare
+          {rows.length === 0 ? "Noch keine Items" : open ? `${open} von ${rows.length} Items fehlen noch` : "Alles beisammen"} · {chests} {chests === 1 ? "Kiste zählt" : "Kisten zählen"} + Inventare
         </span>
         <span className="spacer" />
         {canDelete && <button type="button" className="btn btn-quiet btn-danger" onClick={onDelete}>Projekt löschen</button>}
@@ -351,7 +353,7 @@ function ProjectDetail({
       </div>
 
       <div className="panel">
-        <div className="panel-head"><h2>Spieler</h2><span className="faint">alle ihre Kisten zählen</span></div>
+        <div className="panel-head"><h2>Spieler</h2><span className="faint">ihre Kisten und ihr Inventar zählen</span></div>
         <div className="panel-body">
           {owners.length === 0 ? (
             <p className="muted" style={{ margin: 0 }}>Noch keine Kiste gehört einem Spieler. Im Amboss mit dem eigenen Namen benennen, dann taucht er hier auf.</p>
