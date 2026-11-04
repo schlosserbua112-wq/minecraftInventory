@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-// Alte Adresse: Spieler heißt jetzt „Wer hat was?“
+// Alte Adresse: Spieler steht jetzt in der Suche unter „Nach Spieler“
 export default function OldPlayersPage() {
-  redirect("/inventare");
+  redirect("/?modus=spieler");
 }
