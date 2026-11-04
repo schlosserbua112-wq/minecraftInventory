@@ -32,8 +32,6 @@ export interface Settings {
   zoneScanMinutes: number;
   /** Uhrzeit (Stunde) für den täglichen Vollscan. */
   fullScanHour: number;
-  /** Verlauf für Diagramme speichern, alle n Minuten. */
-  historyMinutes: number;
   /** Unbenannte Kisten mit Inhalt in Zonen: ignorieren, als Allgemein oder als nicht zugeordnet zählen. */
   unnamedChests: "ignore" | "common" | "unassigned";
 }
@@ -42,7 +40,6 @@ export const LIMITS = {
   pollSeconds: [10, 30],
   zoneScanMinutes: [5, 240],
   fullScanHour: [0, 23],
-  historyMinutes: [15, 1440],
 } as const;
 
 export function defaultSettings(pollSeconds = 15): Settings {
@@ -52,7 +49,6 @@ export function defaultSettings(pollSeconds = 15): Settings {
     pollSeconds,
     zoneScanMinutes: 30,
     fullScanHour: 4,
-    historyMinutes: 60,
     unnamedChests: "ignore",
   };
 }
@@ -82,7 +78,6 @@ export function normalizeSettings(input: unknown, base: Settings): Settings {
     pollSeconds: clamp(i.pollSeconds, LIMITS.pollSeconds, base.pollSeconds),
     zoneScanMinutes: clamp(i.zoneScanMinutes, LIMITS.zoneScanMinutes, base.zoneScanMinutes),
     fullScanHour: clamp(i.fullScanHour, LIMITS.fullScanHour, base.fullScanHour),
-    historyMinutes: clamp(i.historyMinutes, LIMITS.historyMinutes, base.historyMinutes),
     unnamedChests: ["ignore", "common", "unassigned"].includes(i.unnamedChests as string) ? (i.unnamedChests as Settings["unnamedChests"]) : base.unnamedChests,
   };
 }
