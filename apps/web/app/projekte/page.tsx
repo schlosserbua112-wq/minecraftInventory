@@ -17,15 +17,26 @@ const COLOR_OTHER = "var(--own-unassigned)";
 
 const chestName = (c: ContainerRow) => c.label ?? c.custom_name ?? `${kindLabel(c.kind)} ohne Namen`;
 
-/** Bestand je Item aus den Kisten des Projekts: einzeln gewählte und alle Kisten der gewählten Spieler. */
+/**
+ * Bestand je Item: Kisten des Projekts (einzeln gewählte und alle Kisten der gewählten Spieler)
+ * plus die Inventare aller Spieler. Private Inventare sieht nur, wer sie sehen darf.
+ */
 function projectStock(s: Snapshot, p: Project) {
   const direct = new Set(p.containers);
   const owners = new Set(p.owners);
   const counted = (c: ContainerRow) => direct.has(c.id) || (c.owner_type === "player" && !!c.owner_key && owners.has(c.owner_key));
   const ids = new Set(s.containers.filter(counted).map((c) => c.id));
   const have = new Map<string, number>();
-  for (const r of s.stock) if (r.source_kind === "container" && ids.has(r.source_id)) have.set(r.item_id, (have.get(r.item_id) ?? 0) + r.count);
-  return { have, chests: ids.size, counted };
+  const inInventory = new Map<string, number>();
+  const add = (m: Map<string, number>, id: string, n: number) => m.set(id, (m.get(id) ?? 0) + n);
+  for (const r of s.stock) {
+    if (r.source_kind === "container" && ids.has(r.source_id)) add(have, r.item_id, r.count);
+    else if (r.source_kind === "inventory") {
+      add(have, r.item_id, r.count);
+      add(inInventory, r.item_id, r.count);
+    }
+  }
+  return { have, inInventory, chests: ids.size, counted };
 }
 
 function missingOf(s: Snapshot, p: Project) {
@@ -115,7 +126,7 @@ export default function ProjectsPage() {
     <main className="split">
       <section className="side" aria-label="Projekte">
         <h1>Projekte</h1>
-        <p className="muted" style={{ margin: 0 }}>Was ein Bauprojekt braucht und was davon schon in seinen Kisten liegt. Alle sehen und bearbeiten dieselben Projekte.</p>
+        <p className="muted" style={{ margin: 0 }}>Was ein Bauprojekt braucht und was davon schon in seinen Kisten und den Inventaren der Spieler liegt. Alle sehen und bearbeiten dieselben Projekte.</p>
         <form className="row" style={{ gap: 8, flexWrap: "nowrap" }} onSubmit={create}>
           <label className="sr-only" htmlFor="new-project">Name des neuen Projekts</label>
           <input id="new-project" className="input" style={{ flex: "1 1 auto", minWidth: 0 }} placeholder="Neues Projekt, z. B. Burg" maxLength={60} value={newName} onChange={(e) => setNewName(e.target.value)} />
@@ -212,7 +223,7 @@ function ProjectDetail({
   const [qty, setQty] = useState("64");
   useEffect(() => setName(project.name), [project.name]);
 
-  const { have, chests, counted } = projectStock(snapshot, project);
+  const { have, inInventory, chests, counted } = projectStock(snapshot, project);
   const namesVersion = useItemNames(); // Item-Liste kommt nachgeladen dazu
   const options = useMemo(() => [...new Set([...snapshot.stock.map((r) => r.item_id), ...knownItemIds()])], [snapshot.stock, namesVersion]);
   const taken = project.items.map((i) => i.item_id);
@@ -234,7 +245,7 @@ function ProjectDetail({
   const direct = new Set(project.containers);
   const rows = project.items.map((i) => {
     const h = have.get(i.item_id) ?? 0;
-    return { ...i, have: h, missing: Math.max(i.quantity - h, 0) };
+    return { ...i, have: h, inv: inInventory.get(i.item_id) ?? 0, missing: Math.max(i.quantity - h, 0) };
   });
   const open = rows.filter((r) => r.missing > 0).length;
 
@@ -270,7 +281,7 @@ function ProjectDetail({
         <label className="sr-only" htmlFor="project-name">Name des Projekts</label>
         <input id="project-name" className="input proj-name" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} onBlur={rename} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
         <span className="muted">
-          {rows.length === 0 ? "Noch keine Items" : open ? `${open} von ${rows.length} Items fehlen noch` : "Alles beisammen"} · {chests} {chests === 1 ? "Kiste zählt" : "Kisten zählen"}
+          {rows.length === 0 ? "Noch keine Items" : open ? `${open} von ${rows.length} Items fehlen noch` : "Alles beisammen"} · {chests} {chests === 1 ? "Kiste zählt" : "Kisten zählen"} + alle Inventare
         </span>
         <span className="spacer" />
         {canDelete && <button type="button" className="btn btn-quiet btn-danger" onClick={onDelete}>Projekt löschen</button>}
@@ -321,7 +332,10 @@ function ProjectDetail({
                     <td className="r">
                       <QuantityInput value={r.quantity} label={`Benötigte Menge ${itemName(r.item_id)}`} onChange={(n) => onItem(r.item_id, n)} />
                     </td>
-                    <td className="r col-have">{fmt.format(r.have)}</td>
+                    <td className="r col-have">
+                      {fmt.format(r.have)}
+                      {r.inv > 0 && <span className="faint" style={{ display: "block", fontSize: 12 }}>davon {fmt.format(r.inv)} im Inventar</span>}
+                    </td>
                     <td className="r">{r.missing ? <span className="missing">{fmt.format(r.missing)}</span> : <span className="complete">fertig</span>}</td>
                     <td className="r" style={{ width: 1 }}>
                       <button type="button" className="btn btn-quiet btn-small" aria-label={`${itemName(r.item_id)} entfernen`} title="Entfernen" onClick={() => onItem(r.item_id, 0)}>
