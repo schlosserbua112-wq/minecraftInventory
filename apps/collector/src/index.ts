@@ -216,7 +216,7 @@ async function main() {
         const { players, message, extra } = run;
         const containers = run.containers.filter((c) => c.customName || wantUnnamed(c));
         const result = aggregate(players, containers, rule, owners, unnamed.claims);
-        await sink.write(players, containers, result, s.historyMinutes);
+        await sink.write(players, containers, result);
         if (s.sources.takes && run.positions && run.liveIds) {
           const live = run.liveIds;
           const frame: TakeFrame = { rows: result.rows, containers: containers.filter((c) => live.has(c.id)), positions: run.positions };

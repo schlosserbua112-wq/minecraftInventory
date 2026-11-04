@@ -153,7 +153,6 @@ button:disabled{opacity:.5;cursor:default}
   <div class="row"><span class="txt">Spieler und bekannte Kisten abfragen<small>Live-Abfrage per RCON</small></span><span class="num"><input type="number" name="pollSeconds" required><span>Sekunden</span></span></div>
   <div class="row"><span class="txt">Zonen nach neuen Kisten durchsuchen<small>Lädt nur die Region-Dateien der Zonen</small></span><span class="num"><input type="number" name="zoneScanMinutes" required><span>Minuten</span></span></div>
   <div class="row"><span class="txt">Täglicher Vollscan um<small>Am besten nachts, wenn niemand spielt</small></span><span class="num"><input type="number" name="fullScanHour" required><span>Uhr</span></span></div>
-  <div class="row"><span class="txt">Verlauf speichern<small>Summen für Diagramme und Wochenvergleich</small></span><span class="num"><input type="number" name="historyMinutes" required><span>Minuten</span></span></div>
 </section>
 
 <section>
@@ -171,7 +170,7 @@ button:disabled{opacity:.5;cursor:default}
 </main>
 <script>
 const SOURCES = ["inventories","enderChests","offlinePlayers","zoneChests","fullScan","map","takes","stats"];
-const NUMBERS = ["pollSeconds","zoneScanMinutes","fullScanHour","historyMinutes"];
+const NUMBERS = ["pollSeconds","zoneScanMinutes","fullScanHour"];
 const form = document.getElementById("form");
 const msg = document.getElementById("msg");
 let dirty = false;

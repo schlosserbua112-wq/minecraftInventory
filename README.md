@@ -19,7 +19,7 @@ Name im Amboss: Spielername → Besitz des Spielers, `Allgemein` → Allgemeingu
 
 Unbenannte Kisten: Unbenannte Kisten mit Inhalt aus den Zonen erscheinen in der Suche auf der Karte. Jeder kann eine anklicken und „Meine“ oder „Allgemeinheit“ wählen (zählt dann wie eine Kiste „Allgemein“); die Zuordnung hängt an der Position und übersteht neue Scans. Ungeöffnete Loot-Kisten tauchen nie auf, schon geöffnete lassen sich nicht von selbst gebauten unterscheiden. Solche Kisten blendet man mit „Keine Spielerkiste, ausblenden“ dauerhaft aus (wieder einblenden in der Suche unter dem Filter „Ausgeblendet“).
 
-Private Kiste: Unter „Meine Kisten“ macht jeder per Schalter an der Kiste höchstens eine seiner Kisten privat. Andere Spieler sehen sie und ihren Inhalt dann nirgends mehr (Suche, Karte, Projekte), nur Admins; das prüft die Datenbank per RLS. Im Verlauf zählt ihr Inhalt für niemanden mit (der Sammler lässt sie bei den Summen weg). Gehört die Kiste nicht mehr dem Spieler (umbenannt oder „Nicht meine“), ist sie wieder für alle sichtbar.
+Private Kiste: Unter „Meine Kisten“ macht jeder per Schalter an der Kiste höchstens eine seiner Kisten privat. Andere Spieler sehen sie und ihren Inhalt dann nirgends mehr (Suche, Karte, Projekte), nur Admins; das prüft die Datenbank per RLS. Gehört die Kiste nicht mehr dem Spieler (umbenannt oder „Nicht meine“), ist sie wieder für alle sichtbar.
 
 Meine Kisten: Der Tab zeigt jedem seine Kisten mit Inhalt; dort lassen sie sich umbenennen und privat machen. Inventar, Enderkiste und andere Spieler stehen in der Suche unter „Nach Spieler“ (bei genau einem Spieler aufgeteilt nach Inventar, Enderkiste und Kisten). Die alten Adressen `/meine-items`, `/inventare` und `/spieler` leiten weiter. Eigene Kisten umbenennen: Der neue Name gilt nur auf der Website (Tabelle `container_labels`, Migration `20261031000100_container_labels.sql`); im Spiel und für die Zuordnung zählt weiter der Amboss-Name.
 
@@ -64,7 +64,7 @@ npm run pi:bundle   # erzeugt dist\pi\minecraft-tracker (Sammler als eine Datei 
 
 Das legt nur `/opt/apps/minecraft-tracker` an. pi-dashboard, LAN-Party und Autodarts bleiben unverändert; die Kachel entsteht über die `dashboard.*`-Labels.
 
-Die Kachel (Port 8101) öffnet die Einstellungsseite des Sammlers: Datenquellen ein- und ausschalten, Abfrage-, Zonen-, Vollscan- und Verlaufsintervall, Pause. Die Werte liegen im Docker-Volume `settings` und gelten sofort, ohne Neustart. Zugangsdaten stehen dort bewusst nicht, die bleiben in `/etc/minecraft-tracker.env`.
+Die Kachel (Port 8101) öffnet die Einstellungsseite des Sammlers: Datenquellen ein- und ausschalten, Abfrage-, Zonen- und Vollscanintervall, Pause. Die Werte liegen im Docker-Volume `settings` und gelten sofort, ohne Neustart. Zugangsdaten stehen dort bewusst nicht, die bleiben in `/etc/minecraft-tracker.env`.
 Entfernen: `cd /opt/apps/minecraft-tracker && docker compose down --rmi all && cd .. && sudo rm -rf minecraft-tracker`.
 
 Hinweis: Auf dem Pi ist die Speicher-Cgroup abgeschaltet (`cgroup_disable=memory`), deshalb greift `mem_limit` nicht. Der Sammler begrenzt seinen Heap selbst und braucht im Leerlauf etwa 63 MB.
