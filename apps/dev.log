@@ -1,0 +1,14 @@
+   ▲ Next.js 15.5.28
+   - Local:        http://localhost:3123
+   - Network:      http://192.0.2.2:3123
+
+ ✓ Starting...
+ ✓ Ready in 6.4s
+ ○ Compiling /projekte ...
+ ✓ Compiled /projekte in 7.8s (767 modules)
+ GET /projekte?projekt=1 200 in 9185ms
+ ✓ Compiled /_not-found in 478ms (758 modules)
+ GET /item-icons.json 404 in 791ms
+ GET /projekte?projekt=1 200 in 87ms
+ GET /item-icons.json 404 in 59ms
+ ✓ Compiled in 519ms (758 modules)

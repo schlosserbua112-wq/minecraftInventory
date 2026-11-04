@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { ItemIcon } from "@/components/ItemIcon";
 import { ItemPicker } from "@/components/ItemPicker";
 import { Loading } from "@/components/Loading";
@@ -37,7 +37,7 @@ function projectStock(s: Snapshot, p: Project) {
       add(inInventory, r.item_id, r.count);
     }
   }
-  return { have, inInventory, chests: ids.size, counted };
+  return { have, inInventory, chests: ids.size, counted, ids };
 }
 
 /** Bestand plus Crafting (Werkbank, Steinsäge): jedes Material zählt nur einmal. */
@@ -50,23 +50,17 @@ function missingOf(s: Snapshot, p: Project) {
   return projectPlan(s, p).plans.filter((x) => x.missing > 0).length;
 }
 
-type Design = "a" | "b" | "c";
-const designOf = (): Design => {
-  const d = typeof location === "undefined" ? null : new URLSearchParams(location.search).get("entwurf");
-  return d === "b" || d === "c" ? d : "a";
-};
-
-/** „aus 3 Eichenstamm, 2 Kohle“ mit Icons */
-function Uses({ uses, max = 3 }: { uses: CraftPlan["uses"]; max?: number }) {
+/** „3 Eichenstamm, 2 Kohle“ mit Icons; anklicken zeigt, wo das Material liegt. */
+function Uses({ uses, max = 3, onPick }: { uses: CraftPlan["uses"]; max?: number; onPick: (id: string) => void }) {
   const shown = uses.slice(0, max);
   return (
     <span className="uses">
       {shown.map((u) => (
-        <span key={u.item_id} className="use" title={itemName(u.item_id)}>
+        <button key={u.item_id} type="button" className="use" title={`Wo liegt ${itemName(u.item_id)}?`} onClick={() => onPick(u.item_id)}>
           <ItemIcon id={u.item_id} size={14} />
           <span className="num">{fmt.format(u.count)}</span>
-          <span className="use-name">{itemName(u.item_id)}</span>
-        </span>
+          <span>{itemName(u.item_id)}</span>
+        </button>
       ))}
       {uses.length > max && <span className="faint">+{uses.length - max}</span>}
     </span>
@@ -252,10 +246,14 @@ function ProjectDetail({
   const [qty, setQty] = useState("64");
   useEffect(() => setName(project.name), [project.name]);
 
-  const { have, inInventory, chests, counted, plans } = projectPlan(snapshot, project);
-  const design = designOf();
-  const [crafting, setCrafting] = useState(true);
-  const [open_, setOpen] = useState<string | null>(null);
+  const { have, inInventory, chests, counted, ids: countedIds, plans } = projectPlan(snapshot, project);
+  /** Material, dessen Fundorte gerade auf der Karte gezeigt werden */
+  const [where, setWhere] = useState<string | null>(null);
+  const mapRef = useRef<HTMLDivElement>(null);
+  const showWhere = (id: string) => {
+    setWhere(id);
+    requestAnimationFrame(() => mapRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
   const namesVersion = useItemNames(); // Item-Liste kommt nachgeladen dazu
   const options = useMemo(() => [...new Set([...snapshot.stock.map((r) => r.item_id), ...knownItemIds()])], [snapshot.stock, namesVersion]);
   const taken = project.items.map((i) => i.item_id);
@@ -280,13 +278,19 @@ function ProjectDetail({
   const rows = project.items.map((i, n) => {
     const h = have.get(i.item_id) ?? 0;
     const plan = plans[n];
-    const craft = design === "c" && !crafting ? 0 : plan.craftable;
-    return { ...i, have: h, inv: inInventory.get(i.item_id) ?? 0, craftable: craft, uses: craft ? plan.uses : [], missing: Math.max(i.quantity - h, 0) - craft };
+    return { ...i, have: h, inv: inInventory.get(i.item_id) ?? 0, craftable: plan.craftable, uses: plan.uses, missing: plan.missing };
   });
   const open = rows.filter((r) => r.missing > 0).length;
   const crafted = rows.filter((r) => r.craftable > 0).length;
-  const totalUses = new Map<string, number>();
-  for (const r of rows) for (const u of r.uses) totalUses.set(u.item_id, (totalUses.get(u.item_id) ?? 0) + u.count);
+
+  /** Wo das gewählte Material in den Kisten und Inventaren des Projekts liegt, größte Menge zuerst */
+  const spots = useMemo(() => {
+    if (!where) return [];
+    const owners = new Set(project.owners);
+    return snapshot.stock
+      .filter((r) => r.item_id === where && ((r.source_kind === "container" && countedIds.has(r.source_id)) || (r.source_kind === "inventory" && r.owner_type === "player" && owners.has(r.owner_key))))
+      .sort((a, b) => b.count - a.count);
+  }, [where, snapshot.stock, project.owners, countedIds]);
   const rank = (r: (typeof rows)[number]) => (r.missing > 0 ? 2 : r.craftable > 0 ? 1 : 0);
 
   const pins: MapPin[] = snapshot.containers.map((c) => {
@@ -300,6 +304,12 @@ function ProjectDetail({
       color: inDirect ? COLOR_DIRECT : viaOwner ? COLOR_OWNER : COLOR_OTHER,
       title: `${chestName(c)} · ${coords(c)} · ${inDirect ? "zählt zum Projekt, klicken zum Entfernen" : viaOwner ? `zählt über ${c.owner_label}` : "klicken zum Hinzufügen"}`,
     };
+  });
+
+  const spotChests = spots.filter((r) => r.source_kind === "container" && byId.has(r.source_id));
+  const wherePins: MapPin[] = spotChests.map((r) => {
+    const c = byId.get(r.source_id)!;
+    return { id: c.id, x: c.x, z: c.z, ownerType: c.owner_type ?? "unassigned", color: COLOR_DIRECT, label: fmt.format(r.count), title: `${chestName(c)} · ${coords(c)} · ${fmt.format(r.count)} ${itemName(r.item_id)}` };
   });
 
   function rename() {
@@ -330,13 +340,7 @@ function ProjectDetail({
       <div className="panel">
         <div className="panel-head">
           <h2>Bedarf</h2>
-          <span className="faint">fehlende Items zuerst{crafted > 0 && design !== "c" ? `, ${crafted} per Crafting gedeckt` : ""}</span>
-          {design === "c" && (
-            <>
-              <span className="spacer" />
-              <button type="button" className="chip" aria-pressed={crafting} onClick={() => setCrafting(!crafting)}>Crafting einrechnen</button>
-            </>
-          )}
+          <span className="faint">fehlende Items zuerst{crafted > 0 ? `, ${crafted} per Crafting gedeckt` : ""}</span>
         </div>
         <form className="proj-add" onSubmit={add}>
           {pending ? (
@@ -362,26 +366,24 @@ function ProjectDetail({
                   <th>Item</th>
                   <th className="r">Benötigt</th>
                   <th className="r col-have">Vorhanden</th>
-                  {design === "a" && <th className="r col-have">Craftbar</th>}
                   <th className="r">Fehlt</th>
                   <th><span className="sr-only">Aktionen</span></th>
                 </tr>
               </thead>
               <tbody>
                 {[...rows].sort((a, b) => rank(b) - rank(a)).map((r) => (
-                  <Fragment key={r.item_id}>
-                  <tr className={design === "c" && open_ === r.item_id ? "row-open" : undefined}>
+                  <tr key={r.item_id}>
                     <td>
                       <span className="row" style={{ gap: 10, flexWrap: "nowrap" }}>
                         <ItemIcon id={r.item_id} size={18} />
                         <span style={{ display: "flex", flexDirection: "column" }}>
                           {itemName(r.item_id)}
-                          <span className="have-sub faint">{fmt.format(r.have)} vorhanden{r.craftable > 0 && `, ${fmt.format(r.craftable)} craftbar`}</span>
-                          {design === "b" && r.craftable > 0 && (
+                          <span className="have-sub faint">{fmt.format(r.have)} vorhanden</span>
+                          {r.craftable > 0 && (
                             <span className="craft-line">
                               <span className="craft-tag">+{fmt.format(r.craftable)} craftbar</span>
                               <span className="faint">aus</span>
-                              <Uses uses={r.uses} />
+                              <Uses uses={r.uses} onPick={showWhere} />
                             </span>
                           )}
                         </span>
@@ -394,29 +396,11 @@ function ProjectDetail({
                       {fmt.format(r.have)}
                       {r.inv > 0 && <span className="faint" style={{ display: "block", fontSize: 12 }}>davon {fmt.format(r.inv)} im Inventar</span>}
                     </td>
-                    {design === "a" && (
-                      <td className="r col-have">
-                        {r.craftable > 0 ? (
-                          <>
-                            <span className="craftable">+{fmt.format(r.craftable)}</span>
-                            <span className="craft-from">aus <Uses uses={r.uses} max={2} /></span>
-                          </>
-                        ) : (
-                          <span className="faint">–</span>
-                        )}
-                      </td>
-                    )}
                     <td className="r">
                       {r.missing > 0 ? (
                         <span className="missing">{fmt.format(r.missing)}</span>
                       ) : r.craftable > 0 ? (
-                        design === "c" ? (
-                          <button type="button" className="btn btn-quiet btn-small craftable" aria-expanded={open_ === r.item_id} onClick={() => setOpen(open_ === r.item_id ? null : r.item_id)}>
-                            craftbar {open_ === r.item_id ? "▴" : "▾"}
-                          </button>
-                        ) : (
-                          <span className="craftable">{design === "a" ? "mit Crafting" : "craftbar"}</span>
-                        )
+                        <span className="craftable">craftbar</span>
                       ) : (
                         <span className="complete">fertig</span>
                       )}
@@ -427,24 +411,9 @@ function ProjectDetail({
                       </button>
                     </td>
                   </tr>
-                  {design === "c" && open_ === r.item_id && (
-                    <tr className="craft-detail">
-                      <td colSpan={5}>
-                        <span className="faint">{fmt.format(r.craftable)} Stück an Werkbank oder Steinsäge aus</span>
-                        <Uses uses={r.uses} max={8} />
-                      </td>
-                    </tr>
-                  )}
-                  </Fragment>
                 ))}
               </tbody>
             </table>
-            {design === "c" && crafting && totalUses.size > 0 && (
-              <div className="craft-total">
-                <span className="faint">Fürs Craften eingeplant, zählt nicht doppelt:</span>
-                <Uses uses={[...totalUses].map(([item_id, count]) => ({ item_id, count })).sort((a, b) => b.count - a.count)} max={10} />
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -467,9 +436,36 @@ function ProjectDetail({
         </div>
       </div>
 
-      <div className="panel">
-        <div className="panel-head"><h2>Einzelne Kisten</h2><span className="faint">auf der Karte anklicken</span></div>
-        {project.containers.length > 0 && (
+      <div className="panel" ref={mapRef} style={{ scrollMarginTop: 16 }}>
+        {where ? (
+          <>
+            <div className="panel-head">
+              <h2 className="row" style={{ gap: 8, flexWrap: "nowrap" }}><ItemIcon id={where} size={18} />Wo liegt {itemName(where)}?</h2>
+              <span className="faint">in den Kisten und Inventaren des Projekts</span>
+              <span className="spacer" />
+              <button type="button" className="btn btn-quiet btn-small" onClick={() => setWhere(null)}>Alle Kisten zeigen</button>
+            </div>
+            <div className="panel-body list" style={{ paddingTop: 8, paddingBottom: 8, maxHeight: 280, overflowY: "auto" }}>
+              {spots.length === 0 && <p className="empty">Nichts mehr gefunden.</p>}
+              {spots.map((r) => {
+                const c = r.source_kind === "container" ? byId.get(r.source_id) : undefined;
+                return (
+                  <div key={`${r.source_kind}:${r.source_id}`} className="item-row" style={{ cursor: "default" }}>
+                    <span className="dot" style={{ background: c ? COLOR_DIRECT : COLOR_OWNER }} />
+                    <span className="grow">
+                      <span>{c ? chestName(c) : `Inventar von ${r.owner_label}`}</span>
+                      <span className="sub">{c ? coords(c) : "trägt es bei sich"}</span>
+                    </span>
+                    <span className="num">{fmt.format(r.count)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="panel-head"><h2>Einzelne Kisten</h2><span className="faint">auf der Karte anklicken</span></div>
+        )}
+        {!where && project.containers.length > 0 && (
           <div className="panel-body list" style={{ paddingTop: 8, paddingBottom: 8 }}>
             {project.containers.map((id) => {
               const c = byId.get(id);
@@ -488,11 +484,11 @@ function ProjectDetail({
         )}
         <div className="proj-map">
           <MapView
-            pins={pins}
+            pins={where ? wherePins : pins}
             zones={snapshot.zones}
-            onSelect={(id) => onSource({ container: id }, !direct.has(id))}
-            focus={String(project.id)}
-            legend={[
+            onSelect={where ? undefined : (id) => onSource({ container: id }, !direct.has(id))}
+            focus={where ? `${project.id}:${where}` : String(project.id)}
+            legend={where ? [{ label: itemName(where), color: COLOR_DIRECT }] : [
               { label: "Im Projekt", color: COLOR_DIRECT },
               { label: "Über Spieler", color: COLOR_OWNER },
               { label: "Andere Kisten", color: COLOR_OTHER },
