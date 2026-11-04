@@ -27,6 +27,8 @@ export interface Owner {
   /** Inventar und Enderkiste sind privat; es zählen nur die Kisten. */
   hidden: boolean;
   online: boolean;
+  /** Zuletzt auf dem Server gesehen (ISO), über alle Minecraft-Namen des Kontos */
+  lastSeen: string | null;
 }
 
 export type Scope = { mode: "all"; type: OwnerType | "all" } | { mode: "players"; keys: string[] };
@@ -60,7 +62,7 @@ export function useOwners(): Owner[] {
       for (const a of p.aliases ?? []) accountOf.set(a.toLowerCase(), p);
     }
     const byKey = new Map<string, Owner>();
-    const add = (key: string, label: string, online = false) => {
+    const add = (key: string, label: string, online = false, lastSeen: string | null = null) => {
       const acc = accountOf.get(key);
       const prev = byKey.get(key);
       byKey.set(key, {
@@ -71,11 +73,12 @@ export function useOwners(): Owner[] {
         isMe: !!acc && acc.id === meId,
         hidden: !!acc && !acc.inventory_public && acc.id !== meId,
         online: (prev?.online ?? false) || online,
+        lastSeen: [prev?.lastSeen, lastSeen].filter((t): t is string => !!t).sort().at(-1) ?? null,
       });
     };
     for (const p of snapshot.players) {
       const acc = accountOf.get(p.name.toLowerCase());
-      add((acc?.username ?? p.name).toLowerCase(), acc?.username ?? p.name, p.online);
+      add((acc?.username ?? p.name).toLowerCase(), acc?.username ?? p.name, p.online, p.last_seen);
     }
     for (const r of snapshot.stock) if (r.owner_type === "player") add(r.owner_key, r.owner_label);
     for (const c of snapshot.containers) if (c.owner_type === "player" && c.owner_key) add(c.owner_key, c.owner_label ?? c.owner_key);

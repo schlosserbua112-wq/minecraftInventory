@@ -7,7 +7,7 @@ import { ItemTable } from "@/components/ItemTable";
 import { Loading } from "@/components/Loading";
 import { MapView, type MapPin } from "@/components/MapView";
 import { useData } from "@/lib/data";
-import { OWNER_COLOR, OWNER_LABEL, SOURCE_LABEL, chestHeading, coords, kindLabel, totals, type Location } from "@/lib/derive";
+import { OWNER_COLOR, OWNER_LABEL, SOURCE_LABEL, ago, chestHeading, coords, kindLabel, totals, type Location } from "@/lib/derive";
 import { fmt, itemName, matchesItem } from "@/lib/items";
 import { byOwner, colorOf, placesOf, scopeRows, useOwners, useStoredKeys, type Owner, type Scope } from "@/lib/search";
 import { useItemNames } from "@/lib/itemicons";
@@ -17,6 +17,12 @@ const TYPES: (OwnerType | "all")[] = ["all", "player", "unassigned"];
 const TYPE_LABEL: Partial<Record<OwnerType | "all", string>> = { all: "Alles", player: "Spieler" };
 /** Spalten der Tabelle bei "Alle Items" ohne Besitzfilter */
 const TYPE_COLS: OwnerType[] = ["player", "unassigned"];
+/** Spalten bei genau einem gewählten Spieler: wo die Sachen liegen */
+const SOURCE_COLS: { kind: StockRow["source_kind"]; label: string; color: string }[] = [
+  { kind: "inventory", label: "Inventar", color: "#9ee08a" },
+  { kind: "enderchest", label: "Enderkiste", color: "#b48ce0" },
+  { kind: "container", label: "Kisten", color: "#7fb3e6" },
+];
 /** Breite der Seitenleiste: Item-Spalte plus je Zahlenspalte (inkl. Summe); die Karte wird entsprechend schmaler. */
 /** Platz für Item-Spalte (~210px), je Wertspalte ~80px plus Innenabstand der Seitenleiste. */
 const sideWidth = (cols: number) => 258 + 80 * (cols + 1);
@@ -82,8 +88,15 @@ export default function SearchPage() {
   const [jump, setJump] = useState<{ id: number; n: number } | undefined>(undefined);
 
   // Modus im Link merken (?modus=spieler), damit er Neuladen übersteht
+  // „Auf der Karte zeigen“ aus „Meine Kisten“ öffnet eine Kiste direkt (?kiste=…)
   useEffect(() => {
-    if (new URLSearchParams(location.search).get("modus") === "spieler") setMode("players");
+    const params = new URLSearchParams(location.search);
+    if (params.get("modus") === "spieler") setMode("players");
+    const k = params.get("kiste");
+    if (k) {
+      setSelected(k);
+      setChest(k);
+    }
   }, []);
   const switchMode = (m: "all" | "players") => {
     setMode(m);
@@ -159,8 +172,13 @@ export default function SearchPage() {
     setChest(id);
   };
 
-  const columns: Column[] =
-    mode === "players"
+  /** Genau ein Spieler: Menge nach Ort aufteilen statt einer Spalte, die immer der Summe gleicht. */
+  const single = mode === "players" && picked.length === 1 ? picked[0] : undefined;
+  const columns: Column[] = single
+    ? single.hidden
+      ? []
+      : SOURCE_COLS.map((s) => ({ key: s.kind, label: s.label, color: s.color, count: (r) => r.reduce((n, x) => (x.source_kind === s.kind ? n + x.count : n), 0) }))
+    : mode === "players"
       ? picked.map((o) => ({ key: o.key, label: ownerName(o), color: o.color, count: (r) => r.reduce((n, x) => (x.owner_key === o.key ? n + x.count : n), 0) }))
       : type === "all"
         ? TYPE_COLS.map((t) => ({ key: t, label: OWNER_LABEL[t], color: OWNER_COLOR[t], count: (r) => r.reduce((n, x) => (x.owner_type === t ? n + x.count : n), 0) }))
@@ -244,8 +262,10 @@ export default function SearchPage() {
                   <span className="grow">{o.isMe ? `${o.label} (ich)` : o.label}</span>
                   {o.hidden ? (
                     <span className="faint small" title="Inventar und Enderkiste sind privat"><LockIcon /> nur Kisten</span>
+                  ) : o.online ? (
+                    <span className="small" style={{ color: "var(--up)" }}>online</span>
                   ) : (
-                    o.online && <span className="small" style={{ color: "var(--up)" }}>online</span>
+                    o.lastSeen && <span className="faint small" title="Zuletzt auf dem Server">{ago(o.lastSeen)}</span>
                   )}
                 </label>
               ))}

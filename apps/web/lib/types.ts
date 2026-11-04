@@ -4,7 +4,7 @@ export interface PlayerRow { uuid: string; name: string; online: boolean; last_s
 export interface ContainerRow {
   id: string; dimension: string; x: number; y: number; z: number; kind: string;
   custom_name: string | null; owner_type: OwnerType | null; owner_key: string | null; owner_label: string | null;
-  /** Selbst vergebener Anzeigename auf der Website (Meine Items), unabhängig vom Amboss-Namen. */
+  /** Selbst vergebener Anzeigename auf der Website (Meine Kisten), unabhängig vom Amboss-Namen. */
   label?: string | null;
 }
 export interface ZoneRow { id: number; name: string; dimension: string; center_x: number; center_z: number; radius: number; is_main: boolean }
