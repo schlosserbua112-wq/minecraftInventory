@@ -283,7 +283,7 @@ function ProjectDetail({
         <label className="sr-only" htmlFor="project-name">Name des Projekts</label>
         <input id="project-name" className="input proj-name" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} onBlur={rename} onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()} />
         <span className="muted">
-          {rows.length === 0 ? "Noch keine Items" : open ? `${open} von ${rows.length} Items fehlen noch` : "Alles beisammen"} · {chests} {chests === 1 ? "Kiste zählt" : "Kisten zählen"} + Inventare der gewählten Spieler
+          {rows.length === 0 ? "Noch keine Items" : open ? `${open} von ${rows.length} Items fehlen noch` : "Alles beisammen"} · {chests} {chests === 1 ? "Kiste zählt" : "Kisten zählen"} + Inventare
         </span>
         <span className="spacer" />
         {canDelete && <button type="button" className="btn btn-quiet btn-danger" onClick={onDelete}>Projekt löschen</button>}
