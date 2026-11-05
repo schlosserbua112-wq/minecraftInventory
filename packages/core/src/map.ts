@@ -103,6 +103,8 @@ const FOLIAGE: Record<string, number> = {
   jungle: 0x30bb0b, bamboo_jungle: 0x30bb0b, sparse_jungle: 0x3eb80f, desert: 0xaea42a, savanna: 0xaea42a, savanna_plateau: 0xaea42a,
   windswept_savanna: 0xaea42a, badlands: 0x9e814d, eroded_badlands: 0x9e814d, wooded_badlands: 0x9e814d, mushroom_fields: 0x2bbb0f,
   beach: 0x77ab2f, river: 0x71a74d, ocean: 0x71a74d,
+  // Laub in Dappled Forest ist im Spiel rot
+  dappled_forest: 0xc0482c,
 };
 const WATER: Record<string, number> = {
   swamp: 0x617b64, mangrove_swamp: 0x3a7a6a, warm_ocean: 0x43d5ee, lukewarm_ocean: 0x45adf2, deep_lukewarm_ocean: 0x45adf2,
