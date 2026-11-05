@@ -47,3 +47,38 @@ it("balanceMaterials rechnet Projekt vor Allgemein", () => {
   );
   expect(b[0]).toEqual({ itemId: "minecraft:stone_bricks", needed: 428, inProject: 300, inCommon: 100, missing: 28 });
 });
+
+describe("parseMaterialList mit Litematica-Liste", () => {
+  const text = `Materials for Riesen_Burg: \n\n* Stone Bricks: 113,786\n* Coarse Dirt: 27,528\n* Stone Brick Stairs: 4,442\n* Oak Sign: 10\n* Tripwire Hook: 1\n`;
+  const l = parseMaterialList(text);
+
+  it("schlägt den Namen ohne Unterstrich und Doppelpunkt vor", () => {
+    expect(l.title).toBe("Riesen Burg");
+  });
+
+  it("liest Namen, IDs und Tausenderkommas", () => {
+    expect(l.items).toEqual([
+      { name: "Stone Bricks", itemId: "minecraft:stone_bricks", count: 113786 },
+      { name: "Coarse Dirt", itemId: "minecraft:coarse_dirt", count: 27528 },
+      { name: "Stone Brick Stairs", itemId: "minecraft:stone_brick_stairs", count: 4442 },
+      { name: "Oak Sign", itemId: "minecraft:oak_sign", count: 10 },
+      { name: "Tripwire Hook", itemId: "minecraft:tripwire_hook", count: 1 },
+    ]);
+    expect(l.skipped).toEqual([]);
+  });
+
+  it("versteht auch Punkte, Bindestriche und =", () => {
+    const x = parseMaterialList("- Glass: 1.200\nDirt = 5\n• Torch: 3");
+    expect(x.items.map((i) => [i.itemId, i.count])).toEqual([
+      ["minecraft:glass", 1200],
+      ["minecraft:dirt", 5],
+      ["minecraft:torch", 3],
+    ]);
+  });
+});
+
+it("liest den Litematica-Tabellenexport", () => {
+  const l = parseMaterialList("+-------+-------+\n| Item | Total | Missing |\n+---+\n| Stone Bricks | 113786 | 5 |\n| Oak Log | 1,024 | 0 |\n+---+");
+  expect(l.items.map((i) => [i.itemId, i.count])).toEqual([["minecraft:stone_bricks", 113786], ["minecraft:oak_log", 1024]]);
+  expect(l.skipped).toEqual([]);
+});

@@ -172,6 +172,10 @@ export function supabaseActions(refresh: () => void): Actions {
           ? db().from("build_project_items").upsert({ project_id: id, item_id: itemId, quantity }, { onConflict: "project_id,item_id", ignoreDuplicates: false })
           : db().from("build_project_items").delete().eq("project_id", id).eq("item_id", itemId),
       ),
+    setProjectItems: async (id, items) => {
+      const rows = items.filter((i) => i.quantity > 0).map((i) => ({ project_id: id, item_id: i.item_id, quantity: i.quantity }));
+      if (rows.length) await projectOk(db().from("build_project_items").upsert(rows, { onConflict: "project_id,item_id", ignoreDuplicates: false }));
+    },
     setProjectSource: async (id, source, on) => {
       const [col, value] = "container" in source ? (["container_id", source.container] as const) : (["owner_key", source.owner] as const);
       if (!on) return projectOk(db().from("build_project_sources").delete().eq("project_id", id).eq(col, value));
