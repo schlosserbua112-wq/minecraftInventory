@@ -5,6 +5,7 @@ import { ItemIcon } from "@/components/ItemIcon";
 import { ItemPicker } from "@/components/ItemPicker";
 import { Loading } from "@/components/Loading";
 import { MapView, type MapPin } from "@/components/MapView";
+import { MaterialImport, type ImportMode, type ImportTarget } from "@/components/MaterialImport";
 import { useData } from "@/lib/data";
 import { coords, kindLabel } from "@/lib/derive";
 import { fmt, itemName } from "@/lib/items";
@@ -75,6 +76,7 @@ export default function ProjectsPage() {
   const [activeId, setActiveId] = useState<number | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
+  const [importing, setImporting] = useState(false);
 
   const fail = (e: unknown) => setProblem(e instanceof Error ? e.message : String(e));
   const reload = useCallback(
@@ -129,6 +131,19 @@ export default function ProjectsPage() {
     }
   }
 
+  /** Materialliste in ein neues oder bestehendes Projekt übernehmen. */
+  async function importList(target: ImportTarget, items: { item_id: string; quantity: number }[], mode: ImportMode) {
+    const id = "id" in target ? target.id : await actions.createProject(target.name);
+    const before = projects?.find((p) => p.id === id)?.items ?? [];
+    const rows = mode === "add" ? items.map((i) => ({ ...i, quantity: i.quantity + (before.find((b) => b.item_id === i.item_id)?.quantity ?? 0) })) : items;
+    try {
+      await actions.setProjectItems(id, rows);
+    } finally {
+      await reload();
+      select(id);
+    }
+  }
+
   async function remove(p: Project) {
     if (!confirm(`Projekt „${p.name}“ löschen? Das gilt für alle.`)) return;
     try {
@@ -155,6 +170,10 @@ export default function ProjectsPage() {
           <input id="new-project" className="input" style={{ flex: "1 1 auto", minWidth: 0 }} placeholder="Neues Projekt, z. B. Burg" maxLength={60} value={newName} onChange={(e) => setNewName(e.target.value)} />
           <button type="submit" className="btn btn-primary" disabled={!newName.trim()}>Anlegen</button>
         </form>
+        <button type="button" className="btn" onClick={() => setImporting(true)}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>
+          Materialliste importieren
+        </button>
         {problem && <p role="alert" style={{ margin: 0, color: "var(--down)" }}>{problem}</p>}
         <div className="list" aria-label="Alle Projekte">
           {projects.length === 0 && <p className="empty">Noch kein Projekt. Leg oben eins an, etwa für die Burg oder die nächste Farm.</p>}
@@ -220,6 +239,7 @@ export default function ProjectsPage() {
           </div>
         )}
       </section>
+      {importing && <MaterialImport projects={projects} activeId={active?.id ?? null} onClose={() => setImporting(false)} onImport={importList} />}
     </main>
   );
 }

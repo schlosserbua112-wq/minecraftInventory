@@ -159,6 +159,15 @@ export class DemoSource {
         else if (i >= 0) p.items[i] = { item_id: itemId, quantity };
         else p.items.push({ item_id: itemId, quantity });
       }),
+    setProjectItems: async (id, items) =>
+      this.editProject(id, (p) => {
+        for (const { item_id, quantity } of items) {
+          if (quantity <= 0) continue;
+          const i = p.items.findIndex((x) => x.item_id === item_id);
+          if (i >= 0) p.items[i] = { item_id, quantity };
+          else p.items.push({ item_id, quantity });
+        }
+      }),
     setProjectSource: async (id, source, on) =>
       this.editProject(id, (p) => {
         const [key, value] = "container" in source ? (["containers", source.container] as const) : (["owners", source.owner] as const);

@@ -78,6 +78,8 @@ export interface Actions {
   deleteProject(id: number): Promise<void>;
   /** Menge setzen; 0 entfernt das Item aus dem Projekt. */
   setProjectItem(id: number, itemId: string, quantity: number): Promise<void>;
+  /** Mehrere Mengen auf einmal setzen (z. B. aus einer Materialliste); nur Mengen > 0. */
+  setProjectItems(id: number, items: { item_id: string; quantity: number }[]): Promise<void>;
   /** Kiste oder Spieler zum Bestand des Projekts zählen (true) oder nicht mehr (false). */
   setProjectSource(id: number, source: { container: string } | { owner: string }, on: boolean): Promise<void>;
   /** Unbenannte Kiste als „Meine“ (true) oder „Nicht meine“ (false) markieren. */
