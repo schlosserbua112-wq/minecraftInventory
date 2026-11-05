@@ -135,7 +135,9 @@ export default function ProjectsPage() {
   async function importList(target: ImportTarget, items: { item_id: string; quantity: number }[], mode: ImportMode) {
     const id = "id" in target ? target.id : await actions.createProject(target.name);
     const before = projects?.find((p) => p.id === id)?.items ?? [];
-    const rows = mode === "add" ? items.map((i) => ({ ...i, quantity: i.quantity + (before.find((b) => b.item_id === i.item_id)?.quantity ?? 0) })) : items;
+    const prev = (itemId: string) => (mode === "add" ? (before.find((b) => b.item_id === itemId)?.quantity ?? 0) : 0);
+    // Die Datenbank erlaubt höchstens 10 Mio. je Item
+    const rows = items.map((i) => ({ ...i, quantity: Math.min(i.quantity + prev(i.item_id), 10_000_000) }));
     try {
       await actions.setProjectItems(id, rows);
     } finally {
