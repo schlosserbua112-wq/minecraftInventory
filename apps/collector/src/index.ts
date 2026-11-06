@@ -1,7 +1,9 @@
+import { dirname, join } from "node:path";
 import { aggregate, createMockWorld, detectTakes, type ContainerSnapshot, type PlayerPos, type PlayerSnapshot, type TakeFrame, type UnnamedRule } from "@mc/core";
 import { loadConfig, missingLiveConfig } from "./config.js";
 import { startHealthServer, type HealthState } from "./health.js";
 import { LiveCollector } from "./live.js";
+import { RegionCache } from "./mapcache.js";
 import { LocalMapStore, SupabaseMapStore, type MapStore } from "./mapstore.js";
 import { defaultSettings, SettingsStore, type Settings } from "./settings.js";
 import { ConsoleSink, SupabaseSink, type HeartbeatExtra, type ScanRequest, type Sink, type UnnamedState } from "./sink.js";
@@ -68,6 +70,7 @@ function liveSource(): Source {
   const live = new LiveCollector(config.server, worldFiles(config.server.world));
   const mapStore: MapStore =
     config.supabaseUrl && config.supabaseKey ? new SupabaseMapStore(config.supabaseUrl, config.supabaseKey) : new LocalMapStore(process.env.MAP_DIR || "map-out");
+  const mapCache = new RegionCache(process.env.MAP_CACHE_DIR || join(dirname(config.settingsFile), "map-cache"));
   let lastZoneScan = 0;
   let firstRun = true;
   /** Scans laufen im Hintergrund, die Live-Abfrage wartet nie auf sie. */
@@ -106,10 +109,10 @@ function liveSource(): Source {
     if (map === true || (map === "if-missing" && !(await mapStore.loadIndex()).updated_at)) {
       const t3 = Date.now();
       try {
-        const { regions, uploaded, failed } = await live.renderMap(mapStore);
-        const skipped = failed ? `, ${failed} nicht lesbar` : "";
-        parts.push(`Karte: ${regions} Regionen, ${uploaded} neu${skipped} (${Math.round((Date.now() - t3) / 1000)} s)`);
-        await sink.finishScanRequests(mapIds, `Karte neu gezeichnet: ${regions} Regionen, ${uploaded} geändert${skipped}`);
+        const { regions, uploaded, failed, skipped } = await live.renderMap(mapStore, mapCache);
+        const extra = `${skipped ? `, ${skipped} unverändert übersprungen` : ""}${failed ? `, ${failed} nicht lesbar` : ""}`;
+        parts.push(`Karte: ${regions} Regionen, ${uploaded} neu${extra} (${Math.round((Date.now() - t3) / 1000)} s)`);
+        await sink.finishScanRequests(mapIds, `Karte neu gezeichnet: ${regions} Regionen, ${uploaded} geändert${extra}`);
       } catch (err) {
         // Eine kaputte Karte darf den Kisten-Scan nicht als fehlgeschlagen melden
         const msg = `Karte fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`;
