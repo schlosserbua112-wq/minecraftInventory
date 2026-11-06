@@ -109,8 +109,8 @@ function liveSource(): Source {
     if (map === true || (map === "if-missing" && !(await mapStore.loadIndex()).updated_at)) {
       const t3 = Date.now();
       try {
-        const { regions, uploaded, failed, skipped } = await live.renderMap(mapStore, mapCache);
-        const extra = `${skipped ? `, ${skipped} unverändert übersprungen` : ""}${failed ? `, ${failed} nicht lesbar` : ""}`;
+        const { regions, uploaded, failed, skipped, crashed } = await live.renderMap(mapStore, mapCache);
+        const extra = `${skipped ? `, ${skipped} unverändert übersprungen` : ""}${failed ? `, ${failed} nicht lesbar` : ""}${crashed ? ` (${crashed} ausgelassen, Absturz im letzten Lauf)` : ""}`;
         parts.push(`Karte: ${regions} Regionen, ${uploaded} neu${extra} (${Math.round((Date.now() - t3) / 1000)} s)`);
         await sink.finishScanRequests(mapIds, `Karte neu gezeichnet: ${regions} Regionen, ${uploaded} geändert${extra}`);
       } catch (err) {
