@@ -24,6 +24,32 @@ export class RegionCache {
     }
   }
 
+  /**
+   * Region, die gerade gezeichnet wird. Steht beim nächsten Start noch etwas drin, ist der
+   * Sammler dabei abgestürzt (z. B. Speicher voll); die Region wird dann einmal übersprungen,
+   * damit der Lauf nicht jedes Mal an derselben Stelle stirbt.
+   */
+  markCurrent(region: string | null) {
+    if (!this.ok) return;
+    try {
+      writeFileSync(join(this.dir, "_current"), region ?? "");
+    } catch {
+      // egal
+    }
+  }
+
+  /** Region, bei der der letzte Lauf abgestürzt ist (einmalig, danach vergessen). */
+  takeCrashed(): string | null {
+    if (!this.ok) return null;
+    try {
+      const r = readFileSync(join(this.dir, "_current"), "utf8").trim();
+      this.markCurrent(null);
+      return r || null;
+    } catch {
+      return null;
+    }
+  }
+
   get(region: string): CachedRegion | null {
     if (!this.ok) return null;
     try {

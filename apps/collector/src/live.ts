@@ -325,7 +325,12 @@ export class LiveCollector {
    * gespeichert, und eine abgerissene FTP-Verbindung wird neu aufgebaut, statt den ganzen
    * Lauf zu verwerfen. Regionen, die trotzdem nicht lesbar sind, behalten ihre alte Kachel.
    */
-  async renderMap(store: MapStore, cache?: RegionCache): Promise<{ regions: number; uploaded: number; failed: number; skipped: number }> {
+  async renderMap(
+    store: MapStore,
+    cache?: RegionCache,
+  ): Promise<{ regions: number; uploaded: number; failed: number; skipped: number; crashed: string | null }> {
+    const crashed = cache?.takeCrashed() ?? null;
+    if (crashed) console.warn(`[karte] letzter Lauf ist bei ${crashed} abgestürzt, diese Region wird diesmal übersprungen`);
     const index = await store.loadIndex();
     let regions = 0;
     let uploaded = 0;
@@ -340,7 +345,7 @@ export class LiveCollector {
     try {
       await this.files.open();
       const dir = await this.regionDir("minecraft:overworld");
-      if (!dir) return { regions, uploaded, failed, skipped };
+      if (!dir) return { regions, uploaded, failed, skipped, crashed };
       const files = (await this.files.listStamped(dir)).filter((f) => /^r\.-?\d+\.-?\d+\.mca$/.test(f.name));
       if (!files.length) throw new Error("keine Region-Dateien gefunden (FTP-Liste leer)");
       const seen = new Set<string>();
@@ -357,6 +362,12 @@ export class LiveCollector {
           }
           continue;
         }
+        if (region === crashed) {
+          failed++;
+          seen.add(region); // alte Kachel behalten
+          continue;
+        }
+        cache?.markCurrent(region);
         let buf: Buffer;
         try {
           buf = await this.readWithRetry(`${dir}/${file}`);
@@ -364,11 +375,13 @@ export class LiveCollector {
           failed++;
           seen.add(region); // alte Kachel behalten
           console.warn(`[karte] ${file} nicht lesbar: ${err instanceof Error ? err.message : String(err)}`);
+          cache?.markCurrent(null);
           continue;
         }
         const { png, biomes: b } = renderRegionMap(buf, (i, err) => console.warn(`[karte] ${file} Chunk ${i}: ${String(err)}`));
         if (!png) {
           cache?.set(region, { stamp, tile: false });
+          cache?.markCurrent(null);
           continue;
         }
         addBiomes(region, b);
@@ -384,6 +397,7 @@ export class LiveCollector {
         }
         // erst nach erfolgreichem Hochladen merken
         cache?.set(region, { stamp, tile: true, biomes: b });
+        cache?.markCurrent(null);
         // Kurz durchatmen lassen, damit Live-Abfragen auf dem Pi nicht warten
         await new Promise((r) => setImmediate(r));
       }
@@ -404,7 +418,7 @@ export class LiveCollector {
     }
     this.lastMapDay = new Date().toISOString().slice(0, 10);
     this.lastMapAt = new Date().toISOString();
-    return { regions, uploaded, failed, skipped };
+    return { regions, uploaded, failed, skipped, crashed };
   }
 
   /** Eine Datei lesen; reißt die FTP-Verbindung ab, einmal neu verbinden und noch mal versuchen. */
