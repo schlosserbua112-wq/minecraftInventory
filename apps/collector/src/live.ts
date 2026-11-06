@@ -20,6 +20,7 @@ import { BiomeAtlas, containersFromRegion, readNbt, renderRegionMap } from "@mc/
 import type { ServerConfig } from "./config.js";
 import { Rcon } from "./rcon.js";
 import type { MapStore } from "./mapstore.js";
+import type { RegionCache } from "./mapcache.js";
 import type { Settings } from "./settings.js";
 import type { Zone } from "./sink.js";
 import type { WorldFiles } from "./worldfiles.js";
@@ -324,22 +325,38 @@ export class LiveCollector {
    * gespeichert, und eine abgerissene FTP-Verbindung wird neu aufgebaut, statt den ganzen
    * Lauf zu verwerfen. Regionen, die trotzdem nicht lesbar sind, behalten ihre alte Kachel.
    */
-  async renderMap(store: MapStore): Promise<{ regions: number; uploaded: number; failed: number }> {
+  async renderMap(store: MapStore, cache?: RegionCache): Promise<{ regions: number; uploaded: number; failed: number; skipped: number }> {
     const index = await store.loadIndex();
     let regions = 0;
     let uploaded = 0;
     let failed = 0;
+    let skipped = 0;
     let unsaved = 0;
     const biomes = new BiomeAtlas();
+    const addBiomes = (region: string, b: { palette: string[]; cells: Uint8Array }) => {
+      const [, rx, rz] = region.split(".");
+      biomes.add(Number(rx), Number(rz), b);
+    };
     try {
       await this.files.open();
       const dir = await this.regionDir("minecraft:overworld");
-      if (!dir) return { regions, uploaded, failed };
-      const files = (await this.files.list(dir)).filter((f) => /^r\.-?\d+\.-?\d+\.mca$/.test(f));
+      if (!dir) return { regions, uploaded, failed, skipped };
+      const files = (await this.files.listStamped(dir)).filter((f) => /^r\.-?\d+\.-?\d+\.mca$/.test(f.name));
       if (!files.length) throw new Error("keine Region-Dateien gefunden (FTP-Liste leer)");
       const seen = new Set<string>();
-      for (const file of files) {
+      for (const { name: file, stamp } of files) {
         const region = file.slice(0, -4);
+        // Unveränderte Datei: nicht wieder herunterladen, Kachel und Biome sind schon da
+        const cached = cache?.get(region);
+        if (cached && cached.stamp === stamp && (cached.tile ? Boolean(index.tiles[region]) && cached.biomes : true)) {
+          skipped++;
+          if (cached.tile) {
+            addBiomes(region, cached.biomes!);
+            seen.add(region);
+            regions++;
+          }
+          continue;
+        }
         let buf: Buffer;
         try {
           buf = await this.readWithRetry(`${dir}/${file}`);
@@ -350,9 +367,11 @@ export class LiveCollector {
           continue;
         }
         const { png, biomes: b } = renderRegionMap(buf, (i, err) => console.warn(`[karte] ${file} Chunk ${i}: ${String(err)}`));
-        if (!png) continue;
-        const [, rx, rz] = region.split(".");
-        biomes.add(Number(rx), Number(rz), b);
+        if (!png) {
+          cache?.set(region, { stamp, tile: false });
+          continue;
+        }
+        addBiomes(region, b);
         seen.add(region);
         regions++;
         if (await store.putTile(index, region, png)) {
@@ -363,6 +382,8 @@ export class LiveCollector {
             unsaved = 0;
           }
         }
+        // erst nach erfolgreichem Hochladen merken
+        cache?.set(region, { stamp, tile: true, biomes: b });
         // Kurz durchatmen lassen, damit Live-Abfragen auf dem Pi nicht warten
         await new Promise((r) => setImmediate(r));
       }
@@ -383,7 +404,7 @@ export class LiveCollector {
     }
     this.lastMapDay = new Date().toISOString().slice(0, 10);
     this.lastMapAt = new Date().toISOString();
-    return { regions, uploaded, failed };
+    return { regions, uploaded, failed, skipped };
   }
 
   /** Eine Datei lesen; reißt die FTP-Verbindung ab, einmal neu verbinden und noch mal versuchen. */

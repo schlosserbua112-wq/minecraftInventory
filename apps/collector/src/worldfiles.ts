@@ -1,4 +1,4 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import { posix, resolve } from "node:path";
 import { Writable } from "node:stream";
 import { Client } from "basic-ftp";
@@ -11,6 +11,11 @@ import type { ServerConfig } from "./config.js";
 export interface WorldFiles {
   /** Dateinamen in einem Ordner; leer, wenn es ihn nicht gibt. */
   list(dir: string): Promise<string[]>;
+  /**
+   * Dateien eines Ordners mit Stempel aus Größe und Änderungszeit; gleicher Stempel heißt
+   * unveränderte Datei. Leer, wenn es den Ordner nicht gibt.
+   */
+  listStamped(dir: string): Promise<{ name: string; stamp: string }[]>;
   read(path: string): Promise<Buffer>;
   /** Verbindung für einen Scan öffnen bzw. schließen (FTP); lokal ohne Wirkung. */
   open(): Promise<void>;
@@ -33,6 +38,18 @@ export class LocalWorld implements WorldFiles {
     } catch {
       return [];
     }
+  }
+  async listStamped(dir: string) {
+    const out: { name: string; stamp: string }[] = [];
+    for (const name of await this.list(dir)) {
+      try {
+        const st = await stat(this.abs(posix.join(dir, name)));
+        if (st.isFile()) out.push({ name, stamp: `${st.size}:${st.mtimeMs}` });
+      } catch {
+        // gerade gelöscht
+      }
+    }
+    return out;
   }
   read(path: string) {
     return readFile(this.abs(path));
@@ -66,6 +83,16 @@ export class FtpWorld implements WorldFiles {
     await this.open();
     try {
       return (await this.client!.list(this.abs(dir))).filter((f) => f.isFile || f.isDirectory).map((f) => f.name);
+    } catch {
+      return [];
+    }
+  }
+  async listStamped(dir: string) {
+    await this.open();
+    try {
+      return (await this.client!.list(this.abs(dir)))
+        .filter((f) => f.isFile)
+        .map((f) => ({ name: f.name, stamp: `${f.size}:${f.modifiedAt?.toISOString() ?? f.rawModifiedAt}` }));
     } catch {
       return [];
     }
