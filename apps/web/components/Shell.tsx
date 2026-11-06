@@ -13,6 +13,7 @@ const NAV = [
   { href: "/", label: "Suche" },
   { href: "/meine-kisten", label: "Meine Kisten" },
   { href: "/projekte", label: "Projekte" },
+  { href: "/crafting", label: "Crafting-Rechner" },
   { href: "/entnahmen", label: "Diebstahl-Tracker" },
   { href: "/statistiken", label: "Statistiken" },
 ];

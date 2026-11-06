@@ -8,8 +8,8 @@
  */
 import { RECIPES } from "./recipes-data.js";
 
-/** Ergebnis-Item (ohne "minecraft:") → Rezepte als [Menge je Craft, [[Item-Optionen], Menge je Craft][]] */
-export type RecipeBook = Record<string, [number, [string[], number][]][]>;
+/** Ergebnis-Item (ohne "minecraft:") → Rezepte als [Menge je Craft, [[Item-Optionen], Menge je Craft][], 1 = Steinsäge] */
+export type RecipeBook = Record<string, [number, [string[], number][], 1?][]>;
 
 export interface CraftPlan {
   item_id: string;

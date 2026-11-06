@@ -263,3 +263,34 @@ td .qty-input { min-height: 32px; padding: 4px 8px; }
 .import-row .sub { color: var(--faint); font-size: 12px; overflow-wrap: anywhere; }
 .import-row .num { font-variant-numeric: tabular-nums; font-weight: 600; }
 .import-row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+
+/* Crafting-Rechner */
+.craft-controls { display: flex; flex-direction: column; gap: 14px; }
+.craft-controls .picker { max-width: 360px; }
+.craft-picked { display: inline-flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 14px 0 10px; border: 1px solid var(--accent); border-radius: var(--radius); background: var(--sunken); font-size: 15px; font-weight: 500; }
+.craft-qty { width: 96px; text-align: right; }
+.craft-label { font-size: 12px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; min-width: 90px; }
+.craft-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 10px 16px 0; font-size: 13px; color: var(--muted); }
+.craft-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+.craft-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 16px; border-top: 1px solid var(--line); font-size: 13px; }
+.flow-scroll { overflow-x: auto; padding: 12px 16px 16px; }
+.flow { position: relative; }
+.flow-col { position: absolute; top: 0; }
+.flow-lines { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.flow-lines path { stroke: #5b6648; stroke-width: 2; fill: none; }
+.flow-lines text { fill: var(--muted); font-size: 12px; font-family: var(--font); font-variant-numeric: tabular-nums; paint-order: stroke; stroke: var(--panel); stroke-width: 4px; }
+.flow-card { position: absolute; display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--raised); border: 1px solid var(--line-strong); border-radius: var(--radius); }
+.flow-card[data-target] { border-color: var(--accent); }
+.flow-card[data-status="ok"] { border-color: var(--up); box-shadow: inset 3px 0 0 var(--up); }
+.flow-card[data-status="craft"] { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.flow-card[data-status="missing"] { border-color: var(--down); box-shadow: inset 3px 0 0 var(--down); }
+.flow-text { flex: 1 1 auto; min-width: 0; }
+.flow-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flow-name b { font-size: 15px; }
+.flow-sub { font-size: 12px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.flow-tools { position: absolute; right: 6px; top: -11px; display: flex; gap: 4px; opacity: 0; transition: opacity 150ms ease-out; }
+.flow-card:hover .flow-tools, .flow-card:focus-within .flow-tools { opacity: 1; }
+@media (hover: none) { .flow-tools { opacity: 1; } }
+.flow-btn, .flow-select { height: 22px; padding: 0 7px; font: inherit; font-size: 11px; color: var(--muted); background: var(--panel); border: 1px solid var(--line-strong); border-radius: 3px; cursor: pointer; }
+.flow-btn:hover, .flow-select:hover { color: var(--text); border-color: var(--accent); }
+.flow-select { max-width: 130px; }

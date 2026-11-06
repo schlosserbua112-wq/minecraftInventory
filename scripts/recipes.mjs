@@ -48,17 +48,17 @@ for (const [key, r] of Object.entries(recipes)) {
   const result = short(r.result.id);
   // Rezepte, die ihr eigenes Ergebnis brauchen (z. B. Färben), bringen nichts
   if (ings.some(([o]) => o.includes(result))) continue;
-  (out[result] ??= []).push([r.result.count ?? 1, ings, key]);
+  (out[result] ??= []).push([r.result.count ?? 1, ings, key, r.type === "minecraft:stonecutting"]);
   n++;
 }
 // Sparsamstes Rezept zuerst (Steinsäge: 1 Stein → 1 Treppe statt 6 → 4 an der Werkbank)
 const cost = ([c, ings]) => ings.reduce((s, [, q]) => s + q, 0) / c;
 for (const list of Object.values(out)) list.sort((a, b) => cost(a) - cost(b) || a[2].localeCompare(b[2]));
-const data = Object.fromEntries(Object.entries(out).sort().map(([k, v]) => [k, v.map(([c, i]) => [c, i])]));
+const data = Object.fromEntries(Object.entries(out).sort().map(([k, v]) => [k, v.map(([c, i, , stone]) => (stone ? [c, i, 1] : [c, i]))]));
 
 const src = `// Automatisch erzeugt mit \`node scripts/recipes.mjs ${version}\`, nicht von Hand ändern.
 // Quelle: Vanilla-Daten ${version} (misode/mcmeta), nur Werkbank und Steinsäge.
-// Ergebnis-Item → Rezepte als [Ergebnis-Menge, [[Item-Optionen], Menge je Craft][]]; IDs ohne "minecraft:".
+// Ergebnis-Item → Rezepte als [Ergebnis-Menge, [[Item-Optionen], Menge je Craft][], 1 = Steinsäge]; IDs ohne "minecraft:".
 import type { RecipeBook } from "./recipes.js";
 
 export const RECIPE_VERSION = ${JSON.stringify(version)};
