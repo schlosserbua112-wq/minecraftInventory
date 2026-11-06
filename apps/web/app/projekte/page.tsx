@@ -19,6 +19,9 @@ const COLOR_DIRECT = "var(--accent)";
 const COLOR_OWNER = "var(--own-project)";
 const COLOR_OTHER = "var(--own-unassigned)";
 
+/** Reservierter Quellen-Schlüssel: alle Kisten der Allgemeinheit zählen. Mit „@“ kann es keinen Spielernamen geben. */
+const COMMON_KEY = "@allgemein";
+
 const chestName = (c: ContainerRow) => c.label ?? c.custom_name ?? `${kindLabel(c.kind)} ohne Namen`;
 
 /**
@@ -28,7 +31,9 @@ const chestName = (c: ContainerRow) => c.label ?? c.custom_name ?? `${kindLabel(
 function projectStock(s: Snapshot, p: Project) {
   const direct = new Set(p.containers);
   const owners = new Set(p.owners);
-  const counted = (c: ContainerRow) => direct.has(c.id) || (c.owner_type === "player" && !!c.owner_key && owners.has(c.owner_key));
+  const common = owners.has(COMMON_KEY);
+  const counted = (c: ContainerRow) =>
+    direct.has(c.id) || (c.owner_type === "player" && !!c.owner_key && owners.has(c.owner_key)) || (common && c.owner_type === "common");
   const ids = new Set(s.containers.filter(counted).map((c) => c.id));
   const have = new Map<string, number>();
   const inInventory = new Map<string, number>();
@@ -168,7 +173,7 @@ export default function ProjectsPage() {
     <main className="split">
       <section className="side" aria-label="Projekte">
         <h1>Projekte</h1>
-        <p className="muted" style={{ margin: 0 }}>Was ein Bauprojekt braucht und was davon schon in seinen Kisten und den Inventaren der gewählten Spieler liegt. Alle sehen und bearbeiten dieselben Projekte.</p>
+        <p className="muted" style={{ margin: 0 }}>Was ein Bauprojekt braucht und was davon schon in seinen Kisten, den Kisten der Allgemeinheit (wenn gewählt) und den Inventaren der gewählten Spieler liegt. Alle sehen und bearbeiten dieselben Projekte.</p>
         <form className="row" style={{ gap: 8, flexWrap: "nowrap" }} onSubmit={create}>
           <label className="sr-only" htmlFor="new-project">Name des neuen Projekts</label>
           <input id="new-project" className="input" style={{ flex: "1 1 auto", minWidth: 0 }} placeholder="Neues Projekt, z. B. Burg" maxLength={60} value={newName} onChange={(e) => setNewName(e.target.value)} />
@@ -294,11 +299,12 @@ function ProjectDetail({
     }
     // Auch Spieler ohne eigene Kisten: ihr Inventar kann zählen
     for (const r of snapshot.stock) if (r.source_kind === "inventory" && r.owner_type === "player" && !m.has(r.owner_key)) m.set(r.owner_key, { label: r.owner_label, chests: 0 });
-    for (const k of project.owners) if (!m.has(k)) m.set(k, { label: k, chests: 0 });
+    for (const k of project.owners) if (!m.has(k) && k !== COMMON_KEY) m.set(k, { label: k, chests: 0 });
     return [...m].sort((a, b) => a[1].label.localeCompare(b[1].label));
   }, [snapshot.containers, snapshot.stock, project.owners]);
 
   const byId = new Map(snapshot.containers.map((c) => [c.id, c]));
+  const commonChests = snapshot.containers.filter((c) => c.owner_type === "common").length;
   const direct = new Set(project.containers);
   const rows = project.items.map((i, n) => {
     const h = have.get(i.item_id) ?? 0;
@@ -333,7 +339,7 @@ function ProjectDetail({
       z: c.z,
       ownerType: c.owner_type ?? "unassigned",
       color: inDirect ? COLOR_DIRECT : viaOwner ? COLOR_OWNER : COLOR_OTHER,
-      title: `${chestName(c)} · ${coords(c)} · ${inDirect ? "zählt zum Projekt, klicken zum Entfernen" : viaOwner ? `zählt über ${c.owner_label}` : "klicken zum Hinzufügen"}`,
+      title: `${chestName(c)} · ${coords(c)} · ${inDirect ? "zählt zum Projekt, klicken zum Entfernen" : viaOwner ? `zählt über ${c.owner_type === "common" ? "die Allgemeinheit" : c.owner_label}` : "klicken zum Hinzufügen"}`,
     };
   });
 
@@ -454,20 +460,21 @@ function ProjectDetail({
       </div>
 
       <div className="panel">
-        <div className="panel-head"><h2>Spieler</h2><span className="faint">ihre Kisten und ihr Inventar zählen</span></div>
+        <div className="panel-head"><h2>Spieler und Allgemeinheit</h2><span className="faint">ihre Kisten und Inventare zählen</span></div>
         <div className="panel-body">
-          {owners.length === 0 ? (
-            <p className="muted" style={{ margin: 0 }}>Noch keine Kiste gehört einem Spieler. Im Amboss mit dem eigenen Namen benennen, dann taucht er hier auf.</p>
-          ) : (
-            <div className="chips" role="group" aria-label="Spieler, deren Kisten zählen">
-              {owners.map(([key, o]) => (
-                <button key={key} type="button" className="chip" aria-pressed={project.owners.includes(key)} onClick={() => onSource({ owner: key }, !project.owners.includes(key))}>
-                  {o.label}
-                  <span className="faint num">{o.chests}</span>
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="chips" role="group" aria-label="Allgemeinheit und Spieler, deren Kisten zählen">
+            <button type="button" className="chip" aria-pressed={project.owners.includes(COMMON_KEY)} title="Alle Kisten der Allgemeinheit zählen" onClick={() => onSource({ owner: COMMON_KEY }, !project.owners.includes(COMMON_KEY))}>
+              Allgemeinheit
+              <span className="faint num">{commonChests}</span>
+            </button>
+            {owners.map(([key, o]) => (
+              <button key={key} type="button" className="chip" aria-pressed={project.owners.includes(key)} onClick={() => onSource({ owner: key }, !project.owners.includes(key))}>
+                {o.label}
+                <span className="faint num">{o.chests}</span>
+              </button>
+            ))}
+          </div>
+          {owners.length === 0 && <p className="muted" style={{ margin: "8px 0 0" }}>Noch keine Kiste gehört einem Spieler. Im Amboss mit dem eigenen Namen benennen, dann taucht er hier auf.</p>}
         </div>
       </div>
 
