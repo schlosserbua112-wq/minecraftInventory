@@ -320,35 +320,59 @@ export class LiveCollector {
   /**
    * Zeichnet die Oberwelt Region für Region und lädt geänderte Kacheln hoch.
    * Es liegt immer nur eine Region-Datei (einige MB) und ein Bild (~1,5 MB) im Speicher.
+   * Bei vielen Regionen dauert das Stunden: das Verzeichnis wird deshalb zwischendurch
+   * gespeichert, und eine abgerissene FTP-Verbindung wird neu aufgebaut, statt den ganzen
+   * Lauf zu verwerfen. Regionen, die trotzdem nicht lesbar sind, behalten ihre alte Kachel.
    */
-  async renderMap(store: MapStore): Promise<{ regions: number; uploaded: number }> {
+  async renderMap(store: MapStore): Promise<{ regions: number; uploaded: number; failed: number }> {
     const index = await store.loadIndex();
     let regions = 0;
     let uploaded = 0;
+    let failed = 0;
+    let unsaved = 0;
     const biomes = new BiomeAtlas();
     try {
       await this.files.open();
       const dir = await this.regionDir("minecraft:overworld");
-      if (!dir) return { regions, uploaded };
+      if (!dir) return { regions, uploaded, failed };
       const files = (await this.files.list(dir)).filter((f) => /^r\.-?\d+\.-?\d+\.mca$/.test(f));
+      if (!files.length) throw new Error("keine Region-Dateien gefunden (FTP-Liste leer)");
       const seen = new Set<string>();
       for (const file of files) {
         const region = file.slice(0, -4);
-        const { png, biomes: b } = renderRegionMap(await this.files.read(`${dir}/${file}`), (i, err) => console.warn(`[karte] ${file} Chunk ${i}: ${String(err)}`));
+        let buf: Buffer;
+        try {
+          buf = await this.readWithRetry(`${dir}/${file}`);
+        } catch (err) {
+          failed++;
+          seen.add(region); // alte Kachel behalten
+          console.warn(`[karte] ${file} nicht lesbar: ${err instanceof Error ? err.message : String(err)}`);
+          continue;
+        }
+        const { png, biomes: b } = renderRegionMap(buf, (i, err) => console.warn(`[karte] ${file} Chunk ${i}: ${String(err)}`));
         if (!png) continue;
         const [, rx, rz] = region.split(".");
         biomes.add(Number(rx), Number(rz), b);
         seen.add(region);
         regions++;
-        if (await store.putTile(index, region, png)) uploaded++;
+        if (await store.putTile(index, region, png)) {
+          uploaded++;
+          // Zwischenstand, damit neue Kacheln nicht erst nach Stunden (oder bei einem Abbruch nie) sichtbar werden
+          if (++unsaved >= 20) {
+            await store.saveIndex(index);
+            unsaved = 0;
+          }
+        }
         // Kurz durchatmen lassen, damit Live-Abfragen auf dem Pi nicht warten
         await new Promise((r) => setImmediate(r));
       }
       for (const r of Object.keys(index.tiles)) if (!seen.has(r)) delete index.tiles[r];
     } finally {
       this.files.close();
+      // Auch bei einem Abbruch: was hochgeladen ist, soll im Verzeichnis stehen
+      if (uploaded) await store.saveIndex(index).catch((err) => console.warn(`[karte] Verzeichnis: ${String(err)}`));
     }
-    await store.saveIndex(index);
+    if (!uploaded) await store.saveIndex(index);
     // Biom-Ebene: ein Fehler hier soll die fertige Karte nicht verwerfen
     if (biomes.size) {
       try {
@@ -359,7 +383,20 @@ export class LiveCollector {
     }
     this.lastMapDay = new Date().toISOString().slice(0, 10);
     this.lastMapAt = new Date().toISOString();
-    return { regions, uploaded };
+    return { regions, uploaded, failed };
+  }
+
+  /** Eine Datei lesen; reißt die FTP-Verbindung ab, einmal neu verbinden und noch mal versuchen. */
+  private async readWithRetry(path: string): Promise<Buffer> {
+    try {
+      return await this.files.read(path);
+    } catch (err) {
+      console.warn(`[karte] ${path}: ${err instanceof Error ? err.message : String(err)}, verbinde neu`);
+      this.files.close();
+      await new Promise((r) => setTimeout(r, 5_000));
+      await this.files.open();
+      return await this.files.read(path);
+    }
   }
 
   private async regionDir(dimension: string): Promise<string | null> {

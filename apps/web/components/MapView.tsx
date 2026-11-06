@@ -310,7 +310,7 @@ export function MapView({
       setBusy(false);
     }
   }
-  const zoom = (factor: number) => setView((v) => ({ ...v, w: Math.min(Math.max(v.w * factor, 64), 20000) }));
+  const zoom = (factor: number) => setView((v) => ({ ...v, w: Math.min(Math.max(v.w * factor, 64), 60000) }));
   const onWheel = (e: WheelEvent) => zoom(e.deltaY > 0 ? 1.15 : 1 / 1.15);
 
   const regionLines = useMemo(() => {
