@@ -10,7 +10,9 @@ import { useData } from "@/lib/data";
 import { coords, kindLabel } from "@/lib/derive";
 import { fmt, itemName } from "@/lib/items";
 import { knownItemIds, useItemNames } from "@/lib/itemicons";
+import { scopeRows, useOwners } from "@/lib/search";
 import type { ContainerRow, Project, Snapshot } from "@/lib/types";
+import type { StockRow } from "@mc/core";
 import { planProject, type CraftPlan } from "@mc/core";
 
 const COLOR_DIRECT = "var(--accent)";
@@ -276,6 +278,7 @@ function ProjectDetail({
     setWhere(id);
     requestAnimationFrame(() => mapRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
   };
+  const allOwners = useOwners();
   const namesVersion = useItemNames(); // Item-Liste kommt nachgeladen dazu
   const options = useMemo(() => [...new Set([...snapshot.stock.map((r) => r.item_id), ...knownItemIds()])], [snapshot.stock, namesVersion]);
   const taken = project.items.map((i) => i.item_id);
@@ -305,14 +308,20 @@ function ProjectDetail({
   const open = rows.filter((r) => r.missing > 0).length;
   const crafted = rows.filter((r) => r.craftable > 0).length;
 
-  /** Wo das gewählte Material in den Kisten und Inventaren des Projekts liegt, größte Menge zuerst */
-  const spots = useMemo(() => {
-    if (!where) return [];
+  /**
+   * Wo das gewählte Item liegt, größte Menge zuerst: zuerst in den Kisten und Inventaren des Projekts,
+   * dann überall sonst, wo man es sehen darf (private Inventare anderer fallen weg).
+   */
+  const { spots, elsewhere } = useMemo(() => {
+    if (!where) return { spots: [], elsewhere: [] };
     const owners = new Set(project.owners);
-    return snapshot.stock
-      .filter((r) => r.item_id === where && ((r.source_kind === "container" && countedIds.has(r.source_id)) || (r.source_kind === "inventory" && r.owner_type === "player" && owners.has(r.owner_key))))
+    const hidden = new Set(snapshot.hidden);
+    const inProject = (r: StockRow) => (r.source_kind === "container" && countedIds.has(r.source_id)) || (r.source_kind === "inventory" && r.owner_type === "player" && owners.has(r.owner_key));
+    const rows = scopeRows(snapshot, allOwners, { mode: "all", type: "all" })
+      .filter((r) => r.item_id === where && !(r.source_kind === "container" && (hidden.has(r.source_id) || !byId.has(r.source_id))))
       .sort((a, b) => b.count - a.count);
-  }, [where, snapshot.stock, project.owners, countedIds]);
+    return { spots: rows.filter(inProject), elsewhere: rows.filter((r) => !inProject(r)) };
+  }, [where, snapshot, allOwners, project.owners, countedIds]);
   const rank = (r: (typeof rows)[number]) => (r.missing > 0 ? 2 : r.craftable > 0 ? 1 : 0);
 
   const pins: MapPin[] = snapshot.containers.map((c) => {
@@ -328,11 +337,13 @@ function ProjectDetail({
     };
   });
 
-  const spotChests = spots.filter((r) => r.source_kind === "container" && byId.has(r.source_id));
-  const wherePins: MapPin[] = spotChests.map((r) => {
-    const c = byId.get(r.source_id)!;
-    return { id: c.id, x: c.x, z: c.z, ownerType: c.owner_type ?? "unassigned", color: COLOR_DIRECT, label: fmt.format(r.count), title: `${chestName(c)} · ${coords(c)} · ${fmt.format(r.count)} ${itemName(r.item_id)}` };
-  });
+  const chestPin = (r: StockRow, color: string, note: string): MapPin[] => {
+    const c = r.source_kind === "container" ? byId.get(r.source_id) : undefined;
+    if (!c) return [];
+    return [{ id: c.id, x: c.x, z: c.z, ownerType: c.owner_type ?? "unassigned", color, label: fmt.format(r.count), title: `${chestName(c)} · ${coords(c)} · ${fmt.format(r.count)} ${itemName(r.item_id)} · ${note}` }];
+  };
+  const wherePins: MapPin[] = [...spots.flatMap((r) => chestPin(r, COLOR_DIRECT, "zählt zum Projekt")), ...elsewhere.flatMap((r) => chestPin(r, COLOR_OTHER, "nicht im Projekt"))];
+  const whereTotal = (list: StockRow[]) => list.reduce((n, r) => n + r.count, 0);
 
   function rename() {
     const n = name.trim().slice(0, 60);
@@ -362,7 +373,7 @@ function ProjectDetail({
       <div className="panel">
         <div className="panel-head">
           <h2>Bedarf</h2>
-          <span className="faint">fehlende Items zuerst{crafted > 0 ? `, ${crafted} per Crafting gedeckt` : ""}</span>
+          <span className="faint">fehlende Items zuerst{crafted > 0 ? `, ${crafted} per Crafting gedeckt` : ""} · Item anklicken zeigt, wo es liegt</span>
         </div>
         <form className="proj-add" onSubmit={add}>
           {pending ? (
@@ -398,8 +409,10 @@ function ProjectDetail({
                     <td>
                       <span className="row" style={{ gap: 10, flexWrap: "nowrap" }}>
                         <ItemIcon id={r.item_id} size={18} />
-                        <span style={{ display: "flex", flexDirection: "column" }}>
-                          {itemName(r.item_id)}
+                        <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+                          <button type="button" className="item-where" aria-pressed={where === r.item_id} title={`Wo liegt ${itemName(r.item_id)}?`} onClick={() => showWhere(r.item_id)}>
+                            {itemName(r.item_id)}
+                          </button>
                           <span className="have-sub faint">{fmt.format(r.have)} vorhanden</span>
                           {r.craftable > 0 && (
                             <span className="craft-line">
@@ -463,25 +476,16 @@ function ProjectDetail({
           <>
             <div className="panel-head">
               <h2 className="row" style={{ gap: 8, flexWrap: "nowrap" }}><ItemIcon id={where} size={18} />Wo liegt {itemName(where)}?</h2>
-              <span className="faint">in den Kisten und Inventaren des Projekts</span>
+              <span className="faint">Kisten mit Koordinaten und Inventare, größte Menge zuerst</span>
               <span className="spacer" />
               <button type="button" className="btn btn-quiet btn-small" onClick={() => setWhere(null)}>Alle Kisten zeigen</button>
             </div>
-            <div className="panel-body list" style={{ paddingTop: 8, paddingBottom: 8, maxHeight: 280, overflowY: "auto" }}>
-              {spots.length === 0 && <p className="empty">Nichts mehr gefunden.</p>}
-              {spots.map((r) => {
-                const c = r.source_kind === "container" ? byId.get(r.source_id) : undefined;
-                return (
-                  <div key={`${r.source_kind}:${r.source_id}`} className="item-row" style={{ cursor: "default" }}>
-                    <span className="dot" style={{ background: c ? COLOR_DIRECT : COLOR_OWNER }} />
-                    <span className="grow">
-                      <span>{c ? chestName(c) : `Inventar von ${r.owner_label}`}</span>
-                      <span className="sub">{c ? coords(c) : "trägt es bei sich"}</span>
-                    </span>
-                    <span className="num">{fmt.format(r.count)}</span>
-                  </div>
-                );
-              })}
+            <div className="panel-body list" style={{ paddingTop: 8, paddingBottom: 8, maxHeight: 360, overflowY: "auto" }}>
+              {spots.length + elsewhere.length === 0 && <p className="empty">Liegt gerade nirgends, wo der Sammler hinschaut.</p>}
+              {spots.length > 0 && <p className="where-group">Zählt zum Projekt · {fmt.format(whereTotal(spots))}</p>}
+              {spots.map((r) => <Spot key={`${r.source_kind}:${r.source_id}`} row={r} container={byId.get(r.source_id)} color={COLOR_DIRECT} />)}
+              {elsewhere.length > 0 && <p className="where-group">Woanders · {fmt.format(whereTotal(elsewhere))}</p>}
+              {elsewhere.map((r) => <Spot key={`${r.source_kind}:${r.source_id}`} row={r} container={byId.get(r.source_id)} color={COLOR_OTHER} />)}
             </div>
           </>
         ) : (
@@ -510,7 +514,7 @@ function ProjectDetail({
             zones={snapshot.zones}
             onSelect={where ? undefined : (id) => onSource({ container: id }, !direct.has(id))}
             focus={where ? `${project.id}:${where}` : String(project.id)}
-            legend={where ? [{ label: itemName(where), color: COLOR_DIRECT }] : [
+            legend={where ? [{ label: "Zählt zum Projekt", color: COLOR_DIRECT }, { label: "Woanders", color: COLOR_OTHER }] : [
               { label: "Im Projekt", color: COLOR_DIRECT },
               { label: "Über Spieler", color: COLOR_OWNER },
               { label: "Andere Kisten", color: COLOR_OTHER },
@@ -519,6 +523,22 @@ function ProjectDetail({
         </div>
       </div>
     </>
+  );
+}
+
+/** Ein Fundort: Kiste mit Koordinaten oder Inventar/Enderkiste eines Spielers. */
+function Spot({ row, container: c, color }: { row: StockRow; container?: ContainerRow; color: string }) {
+  const name = c ? chestName(c) : `${row.source_kind === "enderchest" ? "Enderkiste" : "Inventar"} von ${row.owner_label}`;
+  const owner = c && c.owner_type === "player" ? ` · ${c.owner_label ?? c.owner_key}` : c?.owner_type === "common" ? " · Allgemein" : "";
+  return (
+    <div className="item-row" style={{ cursor: "default" }}>
+      <span className="dot" style={{ background: color }} />
+      <span className="grow">
+        <span>{name}</span>
+        <span className="sub">{c ? `${coords(c)}${owner}` : row.source_kind === "enderchest" ? "in der Enderkiste" : "trägt es bei sich"}</span>
+      </span>
+      <span className="num">{fmt.format(row.count)}</span>
+    </div>
   );
 }
 
