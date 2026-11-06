@@ -106,9 +106,10 @@ function liveSource(): Source {
     if (map === true || (map === "if-missing" && !(await mapStore.loadIndex()).updated_at)) {
       const t3 = Date.now();
       try {
-        const { regions, uploaded } = await live.renderMap(mapStore);
-        parts.push(`Karte: ${regions} Regionen, ${uploaded} neu (${Math.round((Date.now() - t3) / 1000)} s)`);
-        await sink.finishScanRequests(mapIds, `Karte neu gezeichnet: ${regions} Regionen, ${uploaded} geändert`);
+        const { regions, uploaded, failed } = await live.renderMap(mapStore);
+        const skipped = failed ? `, ${failed} nicht lesbar` : "";
+        parts.push(`Karte: ${regions} Regionen, ${uploaded} neu${skipped} (${Math.round((Date.now() - t3) / 1000)} s)`);
+        await sink.finishScanRequests(mapIds, `Karte neu gezeichnet: ${regions} Regionen, ${uploaded} geändert${skipped}`);
       } catch (err) {
         // Eine kaputte Karte darf den Kisten-Scan nicht als fehlgeschlagen melden
         const msg = `Karte fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}`;
