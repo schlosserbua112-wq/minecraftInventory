@@ -1,11 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent, type WheelEvent } from "react";
-import { biomeName, regionsForZone, type OwnerType } from "@mc/core";
+import { biomeName, biomeNameDe, regionsForZone, type OwnerType } from "@mc/core";
 import { useData } from "@/lib/data";
 import { OWNER_COLOR, OWNER_LABEL, chestHeading } from "@/lib/derive";
 import type { ContainerRow, LandmarkRow, ZoneRow } from "@/lib/types";
-import { useBiomes, useWorldMap } from "@/lib/worldmap";
+import { useBiomeAreas, useBiomes, useWorldMap, type BiomeArea } from "@/lib/worldmap";
+
+/** Farbe, mit der ein gesuchtes Biom auf der Karte hervorgehoben wird */
+export const BIOME_HIGHLIGHT = "#5ee1ff";
+/** Kleinere Flächen zählen bei der Suche nur, wenn es vom Biom keine größeren gibt (wie bei den Schildern) */
+const MIN_FOUND_AREA = 32 * 32;
 
 /** Farben zur Auswahl für Landmarks */
 export const LANDMARK_COLORS = ["#e9c46a", "#f29e6d", "#ff9c8a", "#e88fb5", "#b48ce0", "#7fb3e6", "#6fd0c4", "#9ee08a", "#eef0ea"];
@@ -66,6 +71,8 @@ export function MapView({
   focus,
   legend,
   target,
+  biome,
+  onBiomeClose,
 }: {
   pins: MapPin[];
   zones: ZoneRow[];
@@ -77,6 +84,9 @@ export function MapView({
   legend?: { label: string; color: string }[];
   /** Landmark, zu dem gesprungen wird; `n` hochzählen, um erneut zu springen. */
   target?: { id: number; n: number };
+  /** Gesuchtes Biom: alle Flächen hervorheben, zur nächsten springen; `n` hochzählen springt eine Fläche weiter. */
+  biome?: { id: string; n: number };
+  onBiomeClose?: () => void;
 }) {
   const { snapshot, actions, profile, mode } = useData();
   const landmarks = snapshot?.landmarks ?? [];
@@ -124,11 +134,12 @@ export function MapView({
       localStorage.setItem("karte.biome", on ? "an" : "aus");
     } catch {}
   };
-  const biomes = useBiomes(showBiomes && world.tiles.length > 0);
+  const biomes = useBiomes((showBiomes || Boolean(biome)) && world.tiles.length > 0);
+  const biomeAreas = useBiomeAreas(Boolean(biome) && world.tiles.length > 0);
   /** Grenzlinien mit Umriss, damit nur sichtbare gezeichnet werden */
   const biomeLines = useMemo(
     () =>
-      (biomes.layer?.lines ?? []).map((l) => {
+      (showBiomes ? (biomes.layer?.lines ?? []) : []).map((l) => {
         let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
         for (let i = 0; i < l.length; i += 2) {
           minX = Math.min(minX, l[i]);
@@ -138,7 +149,7 @@ export function MapView({
         }
         return { d: `M${l.join(" ")}`, minX, maxX, minZ, maxZ };
       }),
-    [biomes.layer],
+    [biomes.layer, showBiomes],
   );
   const [size, setSize] = useState({ w: 0, h: 0 });
   const aspect = size.h ? size.w / size.h : 1.5;
@@ -175,6 +186,51 @@ export function MapView({
     setError("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target?.n]);
+
+  // Gesuchtes Biom: Flächen nach Abstand zur Hauptzone (sonst zum Ursprung), nächste zuerst
+  const [found, setFound] = useState<{ id: string; i: number } | null>(null);
+  useEffect(() => {
+    if (!biome) return setFound(null);
+    setFound((f) => (f?.id === biome.id ? { id: f.id, i: f.i + 1 } : { id: biome.id, i: 0 }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [biome?.n, biome?.id]);
+  const mainZone = zones.find((z) => z.is_main);
+  const foundAreas = useMemo(() => {
+    if (!found) return [];
+    // Ohne Umrisse (Karte seit dem Update nicht neu gezeichnet) reichen die Schilder für den Sprung
+    const all: BiomeArea[] = biomeAreas
+      ? biomeAreas.filter((a) => a.id === found.id)
+      : (biomes.layer?.labels ?? []).filter((l) => l.id === found.id).map((l) => ({ ...l, rings: [] }));
+    const big = all.filter((a) => a.area >= MIN_FOUND_AREA);
+    const ox = mainZone?.center_x ?? 0, oz = mainZone?.center_z ?? 0;
+    return (big.length ? big : all)
+      .map((a) => {
+        let minX = a.x, maxX = a.x, minZ = a.z, maxZ = a.z;
+        for (const r of a.rings)
+          for (let i = 0; i < r.length; i += 2) {
+            minX = Math.min(minX, r[i]!);
+            maxX = Math.max(maxX, r[i]!);
+            minZ = Math.min(minZ, r[i + 1]!);
+            maxZ = Math.max(maxZ, r[i + 1]!);
+          }
+        const d = a.rings.reduce((acc, r) => {
+          for (let i = 0; i < r.length; i += 2) acc += `${i ? "L" : "M"}${r[i]} ${r[i + 1]}`;
+          return acc + "Z";
+        }, "");
+        return { ...a, minX, maxX, minZ, maxZ, d, dist: Math.hypot(a.x - ox, a.z - oz) };
+      })
+      .sort((a, b) => a.dist - b.dist);
+  }, [found, biomeAreas, biomes.layer, mainZone?.center_x, mainZone?.center_z]);
+  const foundIndex = found && foundAreas.length ? found.i % foundAreas.length : 0;
+  const current = foundAreas[foundIndex];
+  const stepArea = (by: number) => setFound((f) => (f ? { ...f, i: (((f.i + by) % foundAreas.length) + foundAreas.length) % foundAreas.length } : f));
+  useEffect(() => {
+    if (!current) return;
+    const w = Math.max(current.maxX - current.minX, (current.maxZ - current.minZ) * aspect, 320) * 1.3;
+    setView({ cx: current.x, cz: current.z, w: Math.min(w, 60000) });
+    // Nur bei neuer Fläche springen, nicht bei jedem Neuberechnen
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.id, current?.x, current?.z, Boolean(current?.rings.length)]);
 
   // Escape bricht Werkzeug oder offene Karte ab
   useEffect(() => {
@@ -348,7 +404,7 @@ export function MapView({
   /** Schilder: nur Flächen, die auf dem Bildschirm groß genug sind, größte zuerst, ohne Überlappung */
   const biomeTags = useMemo(() => {
     const out: { key: string; name: string; x: number; z: number; w: number }[] = [];
-    if (!biomes.layer) return out;
+    if (!biomes.layer || !showBiomes) return out;
     const placed: { x1: number; z1: number; x2: number; z2: number }[] = [];
     const tagH = 20 * k;
     for (const l of biomes.layer.labels) {
@@ -362,7 +418,7 @@ export function MapView({
       if (out.length >= 80) break;
     }
     return out;
-  }, [biomes.layer, k, x0, z0, view.w, h]);
+  }, [biomes.layer, showBiomes, k, x0, z0, view.w, h]);
   const pinSize = 24 * k;
   const editing = card?.kind === "landmark" ? card : null;
   /** Gespeicherte Landmarks, das gerade bearbeitete in seiner Entwurfsfassung */
@@ -412,6 +468,30 @@ export function MapView({
           <g pointerEvents="none" fill="none" strokeLinejoin="round" strokeLinecap="round">
             <path d={biomePath} stroke="#000" strokeOpacity="0.45" strokeWidth={4 * k} />
             <path d={biomePath} stroke="#fff" strokeOpacity="0.9" strokeWidth={1.75 * k} strokeDasharray={`${6 * k} ${4 * k}`} />
+          </g>
+        )}
+        {foundAreas.length > 0 && (
+          <g pointerEvents="none">
+            {foundAreas.map((a, i) =>
+              a.maxX >= x0 && a.minX <= x0 + view.w && a.maxZ >= z0 && a.minZ <= z0 + h ? (
+                <g key={`${a.x},${a.z}`}>
+                  {a.d && (
+                    <path
+                      d={a.d}
+                      fillRule="evenodd"
+                      fill={BIOME_HIGHLIGHT}
+                      fillOpacity={i === foundIndex ? 0.32 : 0.16}
+                      stroke={BIOME_HIGHLIGHT}
+                      strokeOpacity={i === foundIndex ? 1 : 0.6}
+                      strokeWidth={(i === foundIndex ? 2.5 : 1.5) * k}
+                      strokeLinejoin="round"
+                    />
+                  )}
+                  {/* Punkt in der Fläche, damit auch kleine Flächen beim Herauszoomen sichtbar bleiben */}
+                  <circle cx={a.x} cy={a.z} r={(i === foundIndex ? 7 : 5) * k} fill={BIOME_HIGHLIGHT} stroke="#000" strokeOpacity="0.6" strokeWidth={1.5 * k} />
+                </g>
+              ) : null,
+            )}
           </g>
         )}
         {regionLines.xs.map((x) => (
@@ -553,13 +633,47 @@ export function MapView({
           <button type="button" className="btn btn-quiet btn-small" onClick={() => setTool(null)}>Abbrechen</button>
         </div>
       )}
-      {!tool && !redrawing && !redrawError && biomes.missing && (
+      {!tool && found && (
+        <div className="map-hint" data-ui role="status">
+          <span className="biome-dot" style={{ borderColor: BIOME_HIGHLIGHT }} aria-hidden="true" />
+          <span>
+            <b>{biomeNameDe(found.id)}</b>
+            {current
+              ? foundAreas.length > 1
+                ? ` · Fläche ${foundIndex + 1} von ${foundAreas.length} · ${Math.round(current.x)} / ${Math.round(current.z)}`
+                : ` · ${Math.round(current.x)} / ${Math.round(current.z)}`
+              : biomes.missing
+                ? " · Biome gibt es nach dem nächsten Neuzeichnen der Karte."
+                : biomes.layer
+                  ? " · nicht auf der Karte"
+                  : " · wird geladen …"}
+          </span>
+          {foundAreas.length > 1 && (
+            <>
+              <button type="button" className="btn btn-quiet btn-small" aria-label="Vorige Fläche" onClick={() => stepArea(-1)}>‹</button>
+              <button type="button" className="btn btn-quiet btn-small" aria-label="Nächste Fläche" onClick={() => stepArea(1)}>›</button>
+            </>
+          )}
+          <button
+            type="button"
+            className="btn btn-quiet btn-small"
+            aria-label="Biom-Suche schließen"
+            onClick={() => {
+              setFound(null);
+              onBiomeClose?.();
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+      {!tool && !found && !redrawing && !redrawError && showBiomes && biomes.missing && (
         <div className="map-hint" data-ui role="status">
           <span>Biome gibt es nach dem nächsten Neuzeichnen der Karte.</span>
           <button type="button" className="btn btn-quiet btn-small" onClick={() => setShowBiomes(false)}>Ausblenden</button>
         </div>
       )}
-      {!tool && (redrawing || redrawError) && (
+      {!tool && !found && (redrawing || redrawError) && (
         <div className="map-hint" data-ui role="status">
           <span className={redrawError ? "map-card-error" : undefined}>{redrawError || "Der Pi zeichnet die Karte neu. Das dauert ein paar Minuten."}</span>
           {redrawError && <button type="button" className="btn btn-quiet btn-small" onClick={() => setRedrawError("")}>Schließen</button>}
