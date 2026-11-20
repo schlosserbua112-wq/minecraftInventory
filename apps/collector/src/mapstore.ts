@@ -19,7 +19,7 @@ export interface MapStore {
   /** Lädt die Kachel nur hoch, wenn sie sich geändert hat; liefert true bei Upload. */
   putTile(index: MapIndex, region: string, png: Buffer): Promise<boolean>;
   saveIndex(index: MapIndex): Promise<void>;
-  /** Biom-Ebene (Grenzen und Namensschilder) als overworld/biomes.json */
+  /** Biom-Ebene (Grenzen und Namensschilder) als overworld/biomes.json, Umrisse für die Suche als overworld/biome-areas.json */
   saveBiomes(layer: BiomeLayer): Promise<void>;
 }
 
@@ -58,7 +58,9 @@ export class SupabaseMapStore implements MapStore {
   }
 
   async saveBiomes(layer: BiomeLayer) {
-    await this.upload(`${DIM}/biomes.json`, Buffer.from(JSON.stringify(layer)), "application/json", "60");
+    const { areas, ...rest } = layer;
+    if (areas) await this.upload(`${DIM}/biome-areas.json`, Buffer.from(JSON.stringify({ updated_at: layer.updated_at, areas })), "application/json", "60");
+    await this.upload(`${DIM}/biomes.json`, Buffer.from(JSON.stringify(rest)), "application/json", "60");
   }
 
   private async upload(path: string, body: Buffer, contentType: string, cacheControl: string) {
@@ -91,7 +93,9 @@ export class LocalMapStore implements MapStore {
     writeFileSync(join(this.dir, DIM, "index.json"), JSON.stringify(index));
   }
   async saveBiomes(layer: BiomeLayer) {
+    const { areas, ...rest } = layer;
     mkdirSync(join(this.dir, DIM), { recursive: true });
-    writeFileSync(join(this.dir, DIM, "biomes.json"), JSON.stringify(layer));
+    if (areas) writeFileSync(join(this.dir, DIM, "biome-areas.json"), JSON.stringify({ updated_at: layer.updated_at, areas }));
+    writeFileSync(join(this.dir, DIM, "biomes.json"), JSON.stringify(rest));
   }
 }

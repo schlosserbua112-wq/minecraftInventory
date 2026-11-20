@@ -1,17 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import type { OwnerType, StockRow } from "@mc/core";
+import { biomeName, biomeNameDe, matchesBiome, type OwnerType, type StockRow } from "@mc/core";
 import { ItemIcon } from "@/components/ItemIcon";
 import { ItemTable } from "@/components/ItemTable";
 import { Loading } from "@/components/Loading";
-import { MapView, type MapPin } from "@/components/MapView";
+import { BIOME_HIGHLIGHT, MapView, type MapPin } from "@/components/MapView";
 import { useData } from "@/lib/data";
 import { OWNER_COLOR, OWNER_LABEL, SOURCE_LABEL, ago, chestHeading, coords, kindLabel, totals, type Location } from "@/lib/derive";
 import { fmt, itemName, matchesItem } from "@/lib/items";
 import { byOwner, colorOf, placesOf, scopeRows, useOwners, useStoredKeys, type Owner, type Scope } from "@/lib/search";
 import { useItemNames } from "@/lib/itemicons";
 import type { ContainerRow } from "@/lib/types";
+import { useBiomes } from "@/lib/worldmap";
 
 const TYPES: (OwnerType | "all")[] = ["all", "player", "unassigned"];
 const TYPE_LABEL: Partial<Record<OwnerType | "all", string>> = { all: "Alles", player: "Spieler" };
@@ -86,6 +87,8 @@ export default function SearchPage() {
   const [chest, setChest] = useState<string | null>(null);
   /** Landmark aus der Suche, zu dem die Karte springt */
   const [jump, setJump] = useState<{ id: number; n: number } | undefined>(undefined);
+  /** Biom aus der Suche, das die Karte hervorhebt; erneut klicken springt zur nächsten Fläche */
+  const [biomeJump, setBiomeJump] = useState<{ id: string; n: number } | undefined>(undefined);
 
   // Modus im Link merken (?modus=spieler), damit er Neuladen übersteht
   // „Auf der Karte zeigen“ aus „Meine Kisten“ öffnet eine Kiste direkt (?kiste=…)
@@ -126,6 +129,18 @@ export default function SearchPage() {
     const q = query.trim().toLowerCase();
     return q && snapshot ? snapshot.landmarks.filter((l) => l.name.toLowerCase().includes(q)).slice(0, 8) : [];
   }, [snapshot, query]);
+  // Biome erst laden, wenn gesucht wird (Daten teilt sich die Suche mit der Karte)
+  const biomeLayer = useBiomes(query.trim().length > 0).layer;
+  const biomeHits = useMemo(() => {
+    if (!biomeLayer || !query.trim()) return [];
+    const byId = new Map<string, number>();
+    for (const l of biomeLayer.labels) byId.set(l.id, (byId.get(l.id) ?? 0) + 1);
+    return [...byId]
+      .filter(([id]) => matchesBiome(id, query))
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([id, n]) => ({ id, n }));
+  }, [biomeLayer, query]);
   const places = useMemo(() => (snapshot && item ? placesOf(snapshot, rows, item) : []), [snapshot, rows, item]);
 
   const pins: MapPin[] = useMemo(() => {
@@ -209,7 +224,7 @@ export default function SearchPage() {
       <section className="side side-wide" aria-label="Suche" style={{ "--side-w": `${Math.max(sideWidth(columns.length), 520)}px` } as CSSProperties}>
         <label className="search">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{ color: "var(--muted)" }}><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
-          <span className="sr-only">Item oder Landmark suchen</span>
+          <span className="sr-only">Item, Landmark oder Biom suchen</span>
           <input
             type="search"
             placeholder={mode === "players" && picked.length === 1 && picked[0].isMe ? "Wo liegen meine Diamanten?" : "Wo liegen unsere Diamanten?"}
@@ -331,8 +346,30 @@ export default function SearchPage() {
                 ))}
               </div>
             )}
+            {biomeHits.length > 0 && (
+              <div className="list" aria-label="Biome">
+                {biomeHits.map((b) => (
+                  <button
+                    key={b.id}
+                    type="button"
+                    className="item-row"
+                    aria-current={biomeJump?.id === b.id}
+                    onClick={() => setBiomeJump((j) => ({ id: b.id, n: (j?.n ?? 0) + 1 }))}
+                  >
+                    <span className="biome-dot" style={{ borderColor: BIOME_HIGHLIGHT }} />
+                    <span className="grow">
+                      <span>{biomeNameDe(b.id)}</span>
+                      <span className="sub">
+                        Biom{biomeName(b.id) !== biomeNameDe(b.id) ? ` · ${biomeName(b.id)}` : ""} · {b.n === 1 ? "1 Fläche" : `${b.n} Flächen`}
+                      </span>
+                    </span>
+                    <span className="faint small">{biomeJump?.id === b.id && b.n > 1 ? "Nächste Fläche" : "Auf Karte zeigen"}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             {results.length === 0 ? (
-              landmarkHits.length === 0 && <p className="empty">{emptyText}</p>
+              landmarkHits.length === 0 && biomeHits.length === 0 && <p className="empty">{emptyText}</p>
             ) : (
               <div className="table-wrap">
                 <table className={columns.length > 5 ? "compare dense" : "compare"}>
@@ -404,6 +441,8 @@ export default function SearchPage() {
           focus={`${item ?? "all"}|${mode}|${keyList}`}
           legend={mode === "players" ? picked.map((o) => ({ label: o.isMe ? `${o.label} (ich)` : o.label, color: o.color })) : undefined}
           target={jump}
+          biome={biomeJump}
+          onBiomeClose={() => setBiomeJump(undefined)}
         />
       </section>
     </main>

@@ -64,30 +64,69 @@ export interface BiomeLayer {
   labels: { id: string; name: string; x: number; z: number; area: number }[];
 }
 
+/** Eine zusammenhängende Biomfläche; `rings` als flache Listen [x0, z0, …] (Löcher eigene Ringe). */
+export interface BiomeArea {
+  id: string;
+  x: number;
+  z: number;
+  area: number;
+  rings: number[][];
+}
+
 /**
- * Lädt overworld/biomes.json erst, wenn die Biom-Ansicht eingeschaltet ist.
- * `missing`: eingeschaltet, aber der Sammler hat noch keine Biome gezeichnet.
+ * Lädt eine JSON-Datei aus dem Bucket "map" einmal je Anmeldung und Kartenstand und teilt sie
+ * zwischen allen Komponenten (Suche und Karte brauchen dieselben Biome). null: Datei fehlt.
  */
-export function useBiomes(enabled: boolean): { layer: BiomeLayer | null; missing: boolean } {
+const jsonCache = new Map<string, Promise<unknown | null>>();
+function loadMapJson<T>(path: string, key: string): Promise<T | null> {
+  const k = `${path}|${key}`;
+  let p = jsonCache.get(k);
+  if (!p) {
+    p = (async () => {
+      const { data, error } = await supabase().storage.from("map").download(path);
+      if (error || !data) return null;
+      return JSON.parse(await data.text()) as unknown;
+    })();
+    p.catch(() => jsonCache.delete(k));
+    jsonCache.set(k, p);
+  }
+  return p as Promise<T | null>;
+}
+
+function useMapJson<T>(path: string, enabled: boolean): { data: T | null; missing: boolean } {
   const { mode, session, snapshot } = useData();
   const redrawn = snapshot?.scans.find((r) => r.kind === "map" && r.finished_at)?.finished_at ?? null;
-  const [state, setState] = useState<{ layer: BiomeLayer | null; missing: boolean; key: string | null }>({ layer: null, missing: false, key: null });
+  const [state, setState] = useState<{ data: T | null; missing: boolean; key: string | null }>({ data: null, missing: false, key: null });
   const key = enabled && mode === "live" && session ? `${session.user.id}|${redrawn}` : null;
 
   useEffect(() => {
     if (!key || state.key === key) return;
     let cancelled = false;
-    (async () => {
-      const { data, error } = await supabase().storage.from("map").download("overworld/biomes.json");
-      if (cancelled) return;
-      if (error || !data) return setState({ layer: null, missing: true, key });
-      setState({ layer: JSON.parse(await data.text()) as BiomeLayer, missing: false, key });
-    })().catch((err) => console.warn("Biome nicht geladen:", err));
+    loadMapJson<T>(path, key)
+      .then((data) => !cancelled && setState({ data, missing: !data, key }))
+      .catch((err) => console.warn(`${path} nicht geladen:`, err));
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  return { layer: enabled ? state.layer : null, missing: enabled && state.missing };
+  return { data: enabled ? state.data : null, missing: enabled && state.missing };
+}
+
+/**
+ * Lädt overworld/biomes.json erst, wenn die Biom-Ansicht (oder die Biom-Suche) sie braucht.
+ * `missing`: eingeschaltet, aber der Sammler hat noch keine Biome gezeichnet.
+ */
+export function useBiomes(enabled: boolean): { layer: BiomeLayer | null; missing: boolean } {
+  const { data, missing } = useMapJson<BiomeLayer>("overworld/biomes.json", enabled);
+  return { layer: data, missing };
+}
+
+/**
+ * Umrisse aller Biomflächen (overworld/biome-areas.json) für das Hervorheben eines gesuchten Bioms.
+ * Fehlt die Datei noch (Karte seit dem Update nicht neu gezeichnet), ist `areas` null.
+ */
+export function useBiomeAreas(enabled: boolean): BiomeArea[] | null {
+  return useMapJson<{ areas: BiomeArea[] }>("overworld/biome-areas.json", enabled).data?.areas ?? null;
 }

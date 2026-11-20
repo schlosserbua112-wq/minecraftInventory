@@ -171,6 +171,44 @@ describe("Weltkarte", () => {
     expect(layer.labels.some((l) => l.id === "minecraft:river")).toBe(false); // Flüsse zählen zum Nachbarbiom
     expect(layer.lines.length).toBeGreaterThan(0);
     for (const l of layer.lines) expect(l.length % 2).toBe(0);
+    // Umrisse für die Biom-Suche: jede Fläche mit Schild hat auch einen Umriss
+    const areas = layer.areas!;
+    expect(areas.length).toBeGreaterThanOrEqual(layer.labels.length);
+    for (const l of layer.labels) expect(areas.some((a) => a.id === l.id && a.x === l.x && a.z === l.z)).toBe(true);
+    for (const a of areas) {
+      expect(a.rings.length).toBeGreaterThan(0);
+      for (const r of a.rings) expect(r.length % 2).toBe(0);
+    }
+    // Summe der Flächen = alle Zellen mit Biom (keine Zelle doppelt oder vergessen)
+    const cells = biomes.cells.filter((c) => c !== 255).length;
+    expect(areas.reduce((s, a) => s + a.area, 0)).toBe(cells * 16);
+    // Größter Umriss (Schnürsenkelformel, Löcher abgezogen) liegt nahe an seiner Fläche
+    const shoelace = (r: number[]) => {
+      let s = 0;
+      for (let i = 0; i < r.length; i += 2) {
+        const j = (i + 2) % r.length;
+        s += r[i]! * r[j + 1]! - r[j]! * r[i + 1]!;
+      }
+      return s / 2;
+    };
+    const big = areas[0]!;
+    const poly = Math.abs(big.rings.reduce((s, r) => s + shoelace(r), 0));
+    expect(Math.abs(poly - big.area) / big.area).toBeLessThan(0.1);
+  });
+
+  it("findet Biome auf Deutsch und Englisch", async () => {
+    const { matchesBiome, biomeNameDe } = await import("../src/index.js");
+    expect(biomeNameDe("minecraft:desert")).toBe("Wüste");
+    expect(biomeNameDe("minecraft:cherry_grove")).toBe("Kirschberghain");
+    expect(matchesBiome("minecraft:desert", "Wüste")).toBe(true);
+    expect(matchesBiome("minecraft:desert", "wuste")).toBe(true);
+    expect(matchesBiome("minecraft:desert", "wueste")).toBe(true);
+    expect(matchesBiome("minecraft:desert", "DESERT")).toBe(true);
+    expect(matchesBiome("minecraft:old_growth_pine_taiga", "old growth")).toBe(true);
+    expect(matchesBiome("minecraft:old_growth_pine_taiga", "urtaiga")).toBe(true);
+    expect(matchesBiome("minecraft:mushroom_fields", "pilz")).toBe(true);
+    expect(matchesBiome("minecraft:plains", "wald")).toBe(false);
+    expect(matchesBiome("minecraft:plains", " ")).toBe(false);
   });
 
   it("färbt Gras und Laub je Biom, Fichte und Kirsche bleiben fest", async () => {

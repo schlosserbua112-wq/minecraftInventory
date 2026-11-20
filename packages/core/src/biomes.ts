@@ -26,6 +26,23 @@ export interface BiomeLayer {
   /** Grenzlinien als flache Liste [x0, z0, x1, z1, …] in Blockkoordinaten */
   lines: number[][];
   labels: BiomeLabel[];
+  /**
+   * Umrisse aller Flächen für die Biom-Suche. Der Sammler legt sie getrennt als
+   * overworld/biome-areas.json ab, damit die Biom-Ebene selbst klein bleibt.
+   */
+  areas?: BiomeArea[];
+}
+
+/** Eine zusammenhängende Biomfläche mit Umriss (für Suche und Hervorheben). */
+export interface BiomeArea {
+  id: string;
+  /** Punkt möglichst weit innen in der Fläche */
+  x: number;
+  z: number;
+  /** Fläche in Blöcken² */
+  area: number;
+  /** Ringe als flache Listen [x0, z0, x1, z1, …] in Blockkoordinaten; Löcher sind eigene Ringe (evenodd). */
+  rings: number[][];
 }
 
 const S = 128; // Zellen je Region und Achse
@@ -60,7 +77,7 @@ export class BiomeAtlas {
     const minCells = Math.ceil((opts.minArea ?? 16 * 16) / (CELL * CELL));
     const list = [...this.regions.values()];
     const R = list.length;
-    const out: BiomeLayer = { updated_at: new Date().toISOString(), lines: [], labels: [] };
+    const out: BiomeLayer = { updated_at: new Date().toISOString(), lines: [], labels: [], areas: [] };
     if (!R) return out;
 
     // Zellen aller Regionen in einem Feld, Region r belegt [r*S*S, (r+1)*S*S)
@@ -204,18 +221,62 @@ export class BiomeAtlas {
       const l = c - r * S * S;
       return { gx: list[r]!.rx * S + (l % S), gz: list[r]!.rz * S + ((l / S) | 0) };
     };
-    sizes.forEach((size, id) => {
-      if (size < minLabelCells || best[id]! < 0) return;
-      const c = best[id]!;
-      const { gx, gz } = worldOf(c);
-      const biome = this.names[grid[c]!]!;
-      out.labels.push({ id: biome, name: biomeName(biome), x: gx * CELL + CELL / 2, z: gz * CELL + CELL / 2, area: size * CELL * CELL });
-    });
-    out.labels.sort((a, b) => b.area - a.area);
-
     // Grenzkanten zwischen Zellen, als Graph über die Gitterpunkte
     const OFF = 2 ** 23;
     const key = (x: number, z: number) => (x + OFF) * 2 ** 24 + (z + OFF);
+    const unkey = (k: number) => [Math.floor(k / 2 ** 24) - OFF, (k % 2 ** 24) - OFF] as const;
+
+    // Umriss je Fläche: Randkanten jeder Zelle im Uhrzeigersinn, dann zu Ringen verkettet
+    const edges: number[][] = sizes.map(() => []);
+    for (let c = 0; c < grid.length; c++) {
+      const id = comp[c]!;
+      if (id < 0) continue;
+      const { gx, gz } = worldOf(c);
+      const other = (d: number) => {
+        const n = step(c, d);
+        return n < 0 || comp[n] !== id;
+      };
+      const e = edges[id]!;
+      if (other(3)) e.push(key(gx, gz), key(gx + 1, gz));
+      if (other(0)) e.push(key(gx + 1, gz), key(gx + 1, gz + 1));
+      if (other(2)) e.push(key(gx + 1, gz + 1), key(gx, gz + 1));
+      if (other(1)) e.push(key(gx, gz + 1), key(gx, gz));
+    }
+    const ringsOf = (e: number[]) => {
+      const from = new Map<number, number[]>();
+      for (let i = 0; i < e.length; i += 2) (from.get(e[i]!) ?? from.set(e[i]!, []).get(e[i]!)!).push(e[i + 1]!);
+      const rings: number[][] = [];
+      for (const [start, outs] of from) {
+        while (outs.length) {
+          const pts = [start];
+          let cur = start;
+          do {
+            cur = from.get(cur)!.pop()!;
+            pts.push(cur);
+          } while (cur !== start && from.get(cur)?.length);
+          const ring = simplify(pts.map(unkey), 1.2);
+          if (ring.length < 4) continue;
+          const flat: number[] = [];
+          for (const p of ring.slice(0, -1)) flat.push(p[0] * CELL, p[1] * CELL);
+          rings.push(flat);
+        }
+      }
+      return rings;
+    };
+
+    sizes.forEach((size, id) => {
+      if (best[id]! < 0) return;
+      const c = best[id]!;
+      const { gx, gz } = worldOf(c);
+      const biome = this.names[grid[c]!]!;
+      const spot = { id: biome, x: gx * CELL + CELL / 2, z: gz * CELL + CELL / 2, area: size * CELL * CELL };
+      if (size >= minLabelCells) out.labels.push({ ...spot, name: biomeName(biome) });
+      const rings = ringsOf(edges[id]!);
+      edges[id] = [];
+      if (rings.length) out.areas!.push({ ...spot, rings });
+    });
+    out.labels.sort((a, b) => b.area - a.area);
+    out.areas!.sort((a, b) => b.area - a.area);
     const adj = new Map<number, number[]>();
     const link = (a: number, b: number) => {
       (adj.get(a) ?? adj.set(a, []).get(a)!).push(b);
@@ -246,7 +307,7 @@ export class BiomeAtlas {
         pts.push(cur);
       } while (degree.get(cur) === 2 && adj.get(cur)!.length && cur !== start);
       const flat: number[] = [];
-      for (const p of simplify(pts.map((k) => [Math.floor(k / 2 ** 24) - OFF, (k % 2 ** 24) - OFF] as const), 1.2)) flat.push(p[0] * CELL, p[1] * CELL);
+      for (const p of simplify(pts.map(unkey), 1.2)) flat.push(p[0] * CELL, p[1] * CELL);
       out.lines.push(flat);
     };
     // Erst Linien zwischen Kreuzungen und Enden, dann geschlossene Ringe
